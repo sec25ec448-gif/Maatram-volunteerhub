@@ -1,6 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import {
+  Shield,
+  Mail,
+  ShieldAlert,
+  KeyRound,
+  ArrowLeft,
+  UserPlus,
+  Phone,
+  User,
+} from "lucide-react";
 import PortalHeader, { ActiveTab } from "@/components/PortalHeader";
 import DashboardOverview from "@/components/DashboardOverview";
 import OpportunitiesManager from "@/components/OpportunitiesManager";
@@ -16,25 +26,536 @@ import {
   UserRole,
 } from "@/data/mockData";
 
+const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = {
+  VOLUNTEER: {
+    email: "karthik@student.edu",
+    password: "Volunteer@123",
+  },
+  ADMIN: {
+    email: "admin@maatram.org",
+    password: "Admin@123",
+  },
+  SUPER_ADMIN: {
+    email: "superadmin@maatram.org",
+    password: "Super@123",
+  },
+};
+
 export default function MaatramVolunteerHubPage() {
   const [users, setUsers] = useState<UserAccount[]>(INITIAL_USERS);
   const [opportunities, setOpportunities] =
     useState<Opportunity[]>(INITIAL_OPPORTUNITIES);
   const [applications, setApplications] =
     useState<VolunteerApplication[]>(INITIAL_APPLICATIONS);
-  const [currentRole, setCurrentRole] = useState<UserRole>("SUPER_ADMIN");
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"signin" | "register" | "forgot">(
+    "signin"
+  );
+  const [selectedRole, setSelectedRole] = useState<UserRole>("VOLUNTEER");
+  const [isDemoPrefilled, setIsDemoPrefilled] = useState<boolean>(true);
+
+  const [emailInput, setEmailInput] = useState(
+    DEMO_CREDENTIALS.VOLUNTEER.email
+  );
+  const [passwordInput, setPasswordInput] = useState(
+    DEMO_CREDENTIALS.VOLUNTEER.password
+  );
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+
+  // Register state
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+
+  // Forgot password state
+  const [resetEmail, setResetEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [notifications, setNotifications] = useState<string[]>([
     "New volunteer registration request: Anitha Ramesh",
     "New admin account pending approval: newadmin@maatram.org",
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [phoneInput, setPhoneInput] = useState("+91 98765 00001");
+  const [phoneInput, setPhoneInput] = useState("");
 
-  const currentUser =
-    users.find((u) => u.role === currentRole && u.status === "APPROVED") ||
-    users.find((u) => u.role === currentRole) ||
-    users[0];
+  const currentUser = users.find((u) => u.id === currentUserId) || null;
+
+  const pushNotification = (msg: string) => {
+    setNotifications((prev) => [msg, ...prev]);
+  };
+
+  const handleSelectLoginRole = (role: UserRole) => {
+    setSelectedRole(role);
+    setEmailInput(DEMO_CREDENTIALS[role].email);
+    setPasswordInput(DEMO_CREDENTIALS[role].password);
+    setIsDemoPrefilled(true);
+    setAuthError(null);
+    setAuthSuccess(null);
+  };
+
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    const normalizedEmail = emailInput.trim().toLowerCase();
+    const matchedUser = users.find(
+      (u) => u.email.toLowerCase() === normalizedEmail
+    );
+
+    if (!matchedUser || matchedUser.password !== passwordInput) {
+      setAuthError("Invalid email or password.");
+      return;
+    }
+
+    if (matchedUser.role !== selectedRole) {
+      setAuthError(
+        `This account belongs to ${matchedUser.role.replace(
+          "_",
+          " "
+        )}. Please select the matching portal role above.`
+      );
+      return;
+    }
+
+    if (matchedUser.status === "PENDING_APPROVAL") {
+      setAuthError(
+        "Your account is pending approval by an administrator. Please check back once approved."
+      );
+      return;
+    }
+
+    if (matchedUser.status === "REJECTED") {
+      setAuthError("Your account registration was declined.");
+      return;
+    }
+
+    setCurrentUserId(matchedUser.id);
+    setPhoneInput(matchedUser.phone);
+    setActiveTab(matchedUser.role === "VOLUNTEER" ? "browse" : "dashboard");
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    const normalizedEmail = regEmail.trim().toLowerCase();
+    if (users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
+      setAuthError("An account with this email already exists.");
+      return;
+    }
+
+    const newUser: UserAccount = {
+      id: `u-${Date.now()}`,
+      name: regName.trim(),
+      email: normalizedEmail,
+      password: regPassword,
+      phone: regPhone.trim(),
+      role: selectedRole === "SUPER_ADMIN" ? "ADMIN" : selectedRole,
+      status: "PENDING_APPROVAL",
+    };
+
+    setUsers((prev) => [...prev, newUser]);
+    pushNotification(
+      `New ${newUser.role.toLowerCase()} registration request: ${newUser.name}`
+    );
+    setRegName("");
+    setRegEmail("");
+    setRegPhone("");
+    setRegPassword("");
+    setAuthMode("signin");
+    setAuthSuccess(
+      "Registration submitted! Your account is pending approval before you can sign in."
+    );
+  };
+
+  const handleResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    const normalizedEmail = resetEmail.trim().toLowerCase();
+    const exists = users.some(
+      (u) => u.email.toLowerCase() === normalizedEmail
+    );
+    if (!exists) {
+      setAuthError("No account found with that email address.");
+      return;
+    }
+
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.email.toLowerCase() === normalizedEmail
+          ? { ...u, password: newPassword }
+          : u
+      )
+    );
+    setEmailInput(normalizedEmail);
+    setPasswordInput(newPassword);
+    setIsDemoPrefilled(false);
+    setResetEmail("");
+    setNewPassword("");
+    setAuthMode("signin");
+    setAuthSuccess("Password updated. You can now sign in with your new password.");
+  };
+
+  const handleLogout = () => {
+    setCurrentUserId(null);
+    setShowNotifications(false);
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthMode("signin");
+    setEmailInput(DEMO_CREDENTIALS[selectedRole].email);
+    setPasswordInput(DEMO_CREDENTIALS[selectedRole].password);
+    setIsDemoPrefilled(true);
+  };
+
+  if (!currentUser) {
+    const roleLabelMap: Record<UserRole, string> = {
+      VOLUNTEER: "VOLUNTEER",
+      ADMIN: "ADMIN",
+      SUPER_ADMIN: "SUPER ADMIN",
+    };
+
+    return (
+      <div className="min-h-screen bg-[#F7F5F2] flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-[#E5D8EC] overflow-hidden">
+          {/* Top Violet Banner */}
+          <div className="bg-[#5A2961] text-white px-6 py-7 text-center">
+            <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 mx-auto flex items-center justify-center mb-3">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-wide uppercase">
+              MAATRAM VOLUNTEERHUB
+            </h1>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-[#F3EAF6]/90 mt-1.5 leading-relaxed">
+              &ldquo;EVERY CONTRIBUTION COUNTS. EVERY VOLUNTEER MATTERS.&rdquo;
+            </p>
+          </div>
+
+          {/* Sign In / Register Tabs */}
+          {authMode !== "forgot" && (
+            <div className="grid grid-cols-2 border-b border-[#E5D8EC] bg-[#FAF8FB]">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                className={`py-3.5 text-sm font-semibold transition cursor-pointer border-b-2 ${
+                  authMode === "signin"
+                    ? "bg-white text-[#5A2961] border-[#6F3577]"
+                    : "text-gray-500 border-transparent hover:text-[#5A2961]"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                className={`py-3.5 text-sm font-semibold transition cursor-pointer border-b-2 ${
+                  authMode === "register"
+                    ? "bg-white text-[#5A2961] border-[#6F3577]"
+                    : "text-gray-500 border-transparent hover:text-[#5A2961]"
+                }`}
+              >
+                Register
+              </button>
+            </div>
+          )}
+
+          {/* Role Selector */}
+          {authMode !== "forgot" && (
+            <div className="px-6 pt-5 pb-4 bg-[#FAF8FB] border-b border-[#EFE8F3]">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2.5">
+                SELECT PORTAL ROLE
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(["VOLUNTEER", "ADMIN", "SUPER_ADMIN"] as UserRole[]).map(
+                  (role) => {
+                    const active = selectedRole === role;
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleSelectLoginRole(role)}
+                        className={`py-2 px-2 rounded-full text-xs font-bold uppercase tracking-wide transition cursor-pointer border ${
+                          active
+                            ? "bg-[#F3EAF6] text-[#5A2961] border-[#6F3577] shadow-2xs"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-[#C8B2D0]"
+                        }`}
+                      >
+                        {roleLabelMap[role]}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sign In Form */}
+          {authMode === "signin" && (
+            <form onSubmit={handleSignIn} className="p-6 space-y-4">
+              {authError && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              {authSuccess && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                  {authSuccess}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={(e) => {
+                      setEmailInput(e.target.value);
+                      setIsDemoPrefilled(false);
+                    }}
+                    placeholder="you@maatram.org"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-200 bg-[#FAF9FB] text-sm text-[#1F1624] focus:outline-none focus:border-[#6F3577] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      setIsDemoPrefilled(false);
+                    }}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-200 bg-[#FAF9FB] text-sm text-[#1F1624] focus:outline-none focus:border-[#6F3577] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-0.5">
+                <span className="text-gray-500">
+                  {isDemoPrefilled ? "Demo email pre-filled" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("forgot");
+                    setResetEmail(emailInput);
+                    setAuthError(null);
+                    setAuthSuccess(null);
+                  }}
+                  className="font-semibold text-[#6F3577] hover:underline cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#6F3577] hover:bg-[#5A2961] text-white text-sm font-bold transition cursor-pointer shadow-sm"
+              >
+                Sign In as {roleLabelMap[selectedRole]}
+              </button>
+            </form>
+          )}
+
+          {/* Register Form */}
+          {authMode === "register" && (
+            <form onSubmit={handleRegister} className="p-6 space-y-3.5">
+              {authError && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Your full name"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    required
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    placeholder="+91 98765 00000"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  Create Password
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#6F3577] hover:bg-[#5A2961] text-white text-sm font-bold transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>
+                  Register as{" "}
+                  {selectedRole === "SUPER_ADMIN"
+                    ? "ADMIN"
+                    : roleLabelMap[selectedRole]}
+                </span>
+              </button>
+            </form>
+          )}
+
+          {/* Forgot Password Form */}
+          {authMode === "forgot" && (
+            <form onSubmit={handleResetPassword} className="p-6 space-y-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setAuthError(null);
+                }}
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#6F3577] hover:underline cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Sign In</span>
+              </button>
+
+              <div>
+                <h2 className="text-base font-bold text-[#1F1624]">
+                  Reset Password
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Enter your account email and choose a new password.
+                </p>
+              </div>
+
+              {authError && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  Account Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#6F3577] hover:bg-[#5A2961] text-white text-sm font-bold transition cursor-pointer"
+              >
+                Update Password
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const isAdminOrSuperAdmin =
+    currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+  const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
   const volunteers = users.filter((u) => u.role === "VOLUNTEER");
   const admins = users.filter((u) => u.role === "ADMIN");
@@ -42,26 +563,14 @@ export default function MaatramVolunteerHubPage() {
     (u) => u.status === "PENDING_APPROVAL"
   ).length;
 
-  const pushNotification = (msg: string) => {
-    setNotifications((prev) => [msg, ...prev]);
-  };
-
-  const handleSwitchRole = (role: UserRole) => {
-    setCurrentRole(role);
-    const nextUser =
-      users.find((u) => u.role === role && u.status === "APPROVED") ||
-      users.find((u) => u.role === role);
-    if (nextUser) {
-      setPhoneInput(nextUser.phone);
-    }
-    setActiveTab(role === "VOLUNTEER" ? "browse" : "dashboard");
-  };
-
   const handleUserApproval = (
     userId: string,
     nextStatus: "APPROVED" | "REJECTED",
     roleLabel: UserRole
   ) => {
+    if (!isAdminOrSuperAdmin) return;
+    if (roleLabel === "ADMIN" && !isSuperAdmin) return;
+
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, status: nextStatus } : u))
     );
@@ -77,6 +586,8 @@ export default function MaatramVolunteerHubPage() {
     appId: string,
     decision: "APPROVED" | "DECLINED"
   ) => {
+    if (!isAdminOrSuperAdmin) return;
+
     setApplications((prev) =>
       prev.map((a) => (a.id === appId ? { ...a, status: decision } : a))
     );
@@ -100,6 +611,8 @@ export default function MaatramVolunteerHubPage() {
   const handleCreateOpportunity = (
     newOppData: Omit<Opportunity, "id" | "filledSlots">
   ) => {
+    if (!isAdminOrSuperAdmin) return;
+
     const created: Opportunity = {
       ...newOppData,
       id: `opp-${Date.now()}`,
@@ -125,9 +638,7 @@ export default function MaatramVolunteerHubPage() {
       status: "PENDING",
     };
     setApplications((prev) => [newApp, ...prev]);
-    pushNotification(
-      `${currentUser.name} applied for ${opp.title}`
-    );
+    pushNotification(`${currentUser.name} applied for ${opp.title}`);
   };
 
   const handleSavePhone = (e: React.FormEvent) => {
@@ -148,7 +659,7 @@ export default function MaatramVolunteerHubPage() {
     <div className="min-h-screen bg-[#F7F5F2] text-[#1F1624]">
       <PortalHeader
         currentUser={currentUser}
-        onSwitchRole={handleSwitchRole}
+        onLogout={handleLogout}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         notifications={notifications}
@@ -158,8 +669,7 @@ export default function MaatramVolunteerHubPage() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {/* SUPER ADMIN & ADMIN VIEWS */}
-        {currentRole !== "VOLUNTEER" && activeTab === "dashboard" && (
+        {isAdminOrSuperAdmin && activeTab === "dashboard" && (
           <DashboardOverview
             opportunities={opportunities}
             volunteersCount={volunteers.length}
@@ -167,21 +677,21 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
-        {currentRole !== "VOLUNTEER" && activeTab === "opportunities" && (
+        {isAdminOrSuperAdmin && activeTab === "opportunities" && (
           <OpportunitiesManager
             opportunities={opportunities}
             onCreateOpportunity={handleCreateOpportunity}
           />
         )}
 
-        {currentRole !== "VOLUNTEER" && activeTab === "applications" && (
+        {isAdminOrSuperAdmin && activeTab === "applications" && (
           <ApplicationsTable
             applications={applications}
             onDecision={handleApplicationDecision}
           />
         )}
 
-        {currentRole !== "VOLUNTEER" && activeTab === "volunteers" && (
+        {isAdminOrSuperAdmin && activeTab === "volunteers" && (
           <UserApprovalsTable
             title="Volunteer Registration Requests"
             nameHeader="Name"
@@ -192,7 +702,7 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
-        {currentRole === "SUPER_ADMIN" && activeTab === "admins" && (
+        {isSuperAdmin && activeTab === "admins" && (
           <UserApprovalsTable
             title="Admin Account Approvals"
             nameHeader="Admin Name"
@@ -203,8 +713,7 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
-        {/* VOLUNTEER VIEWS */}
-        {currentRole === "VOLUNTEER" && activeTab === "browse" && (
+        {currentUser.role === "VOLUNTEER" && activeTab === "browse" && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold text-[#522A5B]">
@@ -271,7 +780,7 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
-        {currentRole === "VOLUNTEER" && activeTab === "my-applications" && (
+        {currentUser.role === "VOLUNTEER" && activeTab === "my-applications" && (
           <div className="bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-4">
               My Volunteer Applications
@@ -312,7 +821,7 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
-        {currentRole === "VOLUNTEER" && activeTab === "profile" && (
+        {currentUser.role === "VOLUNTEER" && activeTab === "profile" && (
           <div className="max-w-lg bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-1">
               Volunteer Profile & Contact

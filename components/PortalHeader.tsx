@@ -13,7 +13,7 @@ import {
   FileText,
   UserCog,
 } from "lucide-react";
-import { UserAccount, UserRole } from "@/data/mockData";
+import { UserAccount } from "@/data/mockData";
 
 export type ActiveTab =
   | "dashboard"
@@ -27,7 +27,7 @@ export type ActiveTab =
 
 interface PortalHeaderProps {
   currentUser: UserAccount;
-  onSwitchRole: (role: UserRole) => void;
+  onLogout: () => void;
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   notifications: string[];
@@ -38,7 +38,7 @@ interface PortalHeaderProps {
 
 export default function PortalHeader({
   currentUser,
-  onSwitchRole,
+  onLogout,
   activeTab,
   onSelectTab,
   notifications,
@@ -104,12 +104,6 @@ export default function PortalHeader({
             : []),
         ];
 
-  const roles: { role: UserRole; label: string }[] = [
-    { role: "SUPER_ADMIN", label: "Super Admin" },
-    { role: "ADMIN", label: "Admin" },
-    { role: "VOLUNTEER", label: "Volunteer" },
-  ];
-
   return (
     <header className="bg-[#522A5B] text-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
@@ -122,28 +116,7 @@ export default function PortalHeader({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 relative">
-          {/* Role Switcher */}
-          <div className="flex items-center bg-[#3E1F45] p-1 rounded-lg border border-white/15">
-            {roles.map((r) => {
-              const isSelected = currentUser.role === r.role;
-              return (
-                <button
-                  key={r.role}
-                  type="button"
-                  onClick={() => onSwitchRole(r.role)}
-                  className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
-                    isSelected
-                      ? "bg-white text-[#522A5B] shadow-sm"
-                      : "text-[#F3EAF6]/85 hover:text-white"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              );
-            })}
-          </div>
-
+        <div className="flex items-center gap-4 relative">
           <button
             type="button"
             onClick={onToggleNotifications}
@@ -167,15 +140,12 @@ export default function PortalHeader({
 
           <button
             type="button"
-            onClick={() =>
-              onSelectTab(
-                currentUser.role === "VOLUNTEER" ? "browse" : "dashboard"
-              )
-            }
-            className="p-2.5 rounded-lg bg-[#7A4286] hover:bg-[#663472] transition cursor-pointer"
-            title="Reset view"
+            onClick={onLogout}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#7A4286] hover:bg-[#663472] text-xs font-semibold transition cursor-pointer"
+            title="Sign Out"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
           </button>
 
           {showNotifications && (

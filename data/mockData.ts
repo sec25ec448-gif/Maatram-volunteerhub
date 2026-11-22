@@ -5,6 +5,7 @@ export interface UserAccount {
   id: string;
   name: string;
   email: string;
+  password: string;
   phone: string;
   role: UserRole;
   status: ApprovalStatus;
@@ -34,6 +35,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-1",
     name: "Super Admin User",
     email: "superadmin@maatram.org",
+    password: "Super@123",
     phone: "+91 98765 43210",
     role: "SUPER_ADMIN",
     status: "APPROVED",
@@ -42,6 +44,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-2",
     name: "Admin User",
     email: "admin@maatram.org",
+    password: "Admin@123",
     phone: "+91 98765 43211",
     role: "ADMIN",
     status: "APPROVED",
@@ -50,6 +53,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-3",
     name: "Pending Admin",
     email: "newadmin@maatram.org",
+    password: "Admin@123",
     phone: "+91 98765 43212",
     role: "ADMIN",
     status: "PENDING_APPROVAL",
@@ -58,6 +62,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-4",
     name: "Karthik Raja",
     email: "karthik@student.edu",
+    password: "Volunteer@123",
     phone: "+91 98765 00001",
     role: "VOLUNTEER",
     status: "APPROVED",
@@ -66,6 +71,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-5",
     name: "Priya Sundaram",
     email: "priya@alumni.com",
+    password: "Volunteer@123",
     phone: "+91 98765 00002",
     role: "VOLUNTEER",
     status: "APPROVED",
@@ -74,6 +80,7 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "u-6",
     name: "Anitha Ramesh",
     email: "anitha@volunteer.org",
+    password: "Volunteer@123",
     phone: "+91 98765 00003",
     role: "VOLUNTEER",
     status: "PENDING_APPROVAL",
