@@ -10,6 +10,11 @@ import {
   UserPlus,
   Phone,
   User,
+  Award,
+  Trophy,
+  Clock,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import PortalHeader, { ActiveTab } from "@/components/PortalHeader";
 import DashboardOverview from "@/components/DashboardOverview";
@@ -20,11 +25,20 @@ import {
   INITIAL_USERS,
   INITIAL_OPPORTUNITIES,
   INITIAL_APPLICATIONS,
+  INITIAL_ACTIVITY_HISTORY,
   UserAccount,
   Opportunity,
   VolunteerApplication,
+  VolunteerActivityRecord,
   UserRole,
 } from "@/data/mockData";
+
+interface AppNotification {
+  id: string;
+  message: string;
+  forRoles: UserRole[];
+  recipientEmail?: string;
+}
 
 const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = {
   VOLUNTEER: {
@@ -41,12 +55,62 @@ const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = 
   },
 };
 
+function getVolunteerBadges(user: UserAccount) {
+  return [
+    {
+      id: "beginner",
+      title: "Beginner Volunteer",
+      requirement: "Complete 1 activity",
+      unlocked: user.completedActivities >= 1,
+      badgeText: "🌱",
+    },
+    {
+      id: "bronze",
+      title: "Bronze Volunteer",
+      requirement: "Earn 100 points",
+      unlocked: user.points >= 100,
+      badgeText: "🥉",
+    },
+    {
+      id: "silver",
+      title: "Silver Volunteer",
+      requirement: "Earn 300 points",
+      unlocked: user.points >= 300,
+      badgeText: "🥈",
+    },
+    {
+      id: "gold",
+      title: "Gold Volunteer",
+      requirement: "Earn 500 points",
+      unlocked: user.points >= 500,
+      badgeText: "🥇",
+    },
+    {
+      id: "champion",
+      title: "Community Champion",
+      requirement: "Complete 10 activities",
+      unlocked: user.completedActivities >= 10,
+      badgeText: "👑",
+    },
+    {
+      id: "consistency",
+      title: "Consistency Star",
+      requirement: "Participate in 4 consecutive weeks",
+      unlocked: (user.consecutiveWeeks ?? 0) >= 4,
+      badgeText: "⭐",
+    },
+  ];
+}
+
 export default function MaatramVolunteerHubPage() {
   const [users, setUsers] = useState<UserAccount[]>(INITIAL_USERS);
   const [opportunities, setOpportunities] =
     useState<Opportunity[]>(INITIAL_OPPORTUNITIES);
   const [applications, setApplications] =
     useState<VolunteerApplication[]>(INITIAL_APPLICATIONS);
+  const [activityHistory, setActivityHistory] = useState<
+    VolunteerActivityRecord[]
+  >(INITIAL_ACTIVITY_HISTORY);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signin" | "register" | "forgot">(
@@ -64,29 +128,67 @@ export default function MaatramVolunteerHubPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
-  // Register state
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
-  // Forgot password state
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
+  const [awardTargetEmail, setAwardTargetEmail] = useState("karthik@student.edu");
+  const [awardPoints, setAwardPoints] = useState<number>(50);
+  const [awardHours, setAwardHours] = useState<number>(3);
+  const [awardActivityTitle, setAwardActivityTitle] = useState(
+    "Mentorship & Community Impact"
+  );
+  const [awardNote, setAwardNote] = useState("Awarded by portal admin");
+  const [awardFeedback, setAwardFeedback] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
-  const [notifications, setNotifications] = useState<string[]>([
-    "New volunteer registration request: Anitha Ramesh",
-    "New admin account pending approval: newadmin@maatram.org",
+  const [notifications, setNotifications] = useState<AppNotification[]>([
+    {
+      id: "n-1",
+      message: "New volunteer registration request: Anitha Ramesh",
+      forRoles: ["ADMIN"],
+    },
+    {
+      id: "n-2",
+      message: "New admin account pending approval: newadmin@maatram.org",
+      forRoles: ["SUPER_ADMIN"],
+    },
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
+  const [profileSavedMsg, setProfileSavedMsg] = useState<string | null>(null);
 
   const currentUser = users.find((u) => u.id === currentUserId) || null;
 
-  const pushNotification = (msg: string) => {
-    setNotifications((prev) => [msg, ...prev]);
+  const pushNotification = (
+    message: string,
+    forRoles: UserRole[],
+    recipientEmail?: string
+  ) => {
+    setNotifications((prev) => [
+      {
+        id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        message,
+        forRoles,
+        recipientEmail: recipientEmail?.toLowerCase(),
+      },
+      ...prev,
+    ]);
   };
+
+  const visibleNotifications = currentUser
+    ? notifications.filter((n) => {
+        if (!n.forRoles.includes(currentUser.role)) return false;
+        if (n.recipientEmail) {
+          return n.recipientEmail === currentUser.email.toLowerCase();
+        }
+        return true;
+      })
+    : [];
 
   const handleSelectLoginRole = (role: UserRole) => {
     setSelectedRole(role);
@@ -124,7 +226,9 @@ export default function MaatramVolunteerHubPage() {
 
     if (matchedUser.status === "PENDING_APPROVAL") {
       setAuthError(
-        "Your account is pending approval by an administrator. Please check back once approved."
+        matchedUser.role === "VOLUNTEER"
+          ? "Your volunteer request is pending admin approval. You can access the portal once approved by an admin."
+          : "Your account is pending approval. Please check back once approved."
       );
       return;
     }
@@ -136,7 +240,10 @@ export default function MaatramVolunteerHubPage() {
 
     setCurrentUserId(matchedUser.id);
     setPhoneInput(matchedUser.phone);
-    setActiveTab(matchedUser.role === "VOLUNTEER" ? "browse" : "dashboard");
+    setProfileSavedMsg(null);
+    setActiveTab(
+      matchedUser.role === "VOLUNTEER" ? "volunteer-dashboard" : "dashboard"
+    );
   };
 
   const handleRegister = (e: React.FormEvent) => {
@@ -150,19 +257,28 @@ export default function MaatramVolunteerHubPage() {
       return;
     }
 
+    const assignedRole: UserRole =
+      selectedRole === "SUPER_ADMIN" ? "ADMIN" : selectedRole;
+
     const newUser: UserAccount = {
       id: `u-${Date.now()}`,
       name: regName.trim(),
       email: normalizedEmail,
       password: regPassword,
       phone: regPhone.trim(),
-      role: selectedRole === "SUPER_ADMIN" ? "ADMIN" : selectedRole,
+      role: assignedRole,
       status: "PENDING_APPROVAL",
+      categoryLabel: assignedRole === "VOLUNTEER" ? "Volunteer" : "Coordinator",
+      points: 0,
+      verifiedHours: 0,
+      completedActivities: 0,
+      consecutiveWeeks: 0,
     };
 
     setUsers((prev) => [...prev, newUser]);
     pushNotification(
-      `New ${newUser.role.toLowerCase()} registration request: ${newUser.name}`
+      `New ${newUser.role.toLowerCase()} registration request: ${newUser.name}`,
+      assignedRole === "ADMIN" ? ["SUPER_ADMIN"] : ["ADMIN"]
     );
     setRegName("");
     setRegEmail("");
@@ -170,7 +286,9 @@ export default function MaatramVolunteerHubPage() {
     setRegPassword("");
     setAuthMode("signin");
     setAuthSuccess(
-      "Registration submitted! Your account is pending approval before you can sign in."
+      assignedRole === "VOLUNTEER"
+        ? "Volunteer request submitted! You can sign in once an admin approves your request."
+        : "Admin request submitted! You can sign in once a super admin approves your request."
     );
   };
 
@@ -225,7 +343,6 @@ export default function MaatramVolunteerHubPage() {
     return (
       <div className="min-h-screen bg-[#F7F5F2] flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-[#E5D8EC] overflow-hidden">
-          {/* Top Violet Banner */}
           <div className="bg-[#5A2961] text-white px-6 py-7 text-center">
             <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 mx-auto flex items-center justify-center mb-3">
               <Shield className="w-6 h-6 text-white" />
@@ -238,7 +355,6 @@ export default function MaatramVolunteerHubPage() {
             </p>
           </div>
 
-          {/* Sign In / Register Tabs */}
           {authMode !== "forgot" && (
             <div className="grid grid-cols-2 border-b border-[#E5D8EC] bg-[#FAF8FB]">
               <button
@@ -274,7 +390,6 @@ export default function MaatramVolunteerHubPage() {
             </div>
           )}
 
-          {/* Role Selector */}
           {authMode !== "forgot" && (
             <div className="px-6 pt-5 pb-4 bg-[#FAF8FB] border-b border-[#EFE8F3]">
               <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2.5">
@@ -304,7 +419,6 @@ export default function MaatramVolunteerHubPage() {
             </div>
           )}
 
-          {/* Sign In Form */}
           {authMode === "signin" && (
             <form onSubmit={handleSignIn} className="p-6 space-y-4">
               {authError && (
@@ -387,7 +501,6 @@ export default function MaatramVolunteerHubPage() {
             </form>
           )}
 
-          {/* Register Form */}
           {authMode === "register" && (
             <form onSubmit={handleRegister} className="p-6 space-y-3.5">
               {authError && (
@@ -481,7 +594,6 @@ export default function MaatramVolunteerHubPage() {
             </form>
           )}
 
-          {/* Forgot Password Form */}
           {authMode === "forgot" && (
             <form onSubmit={handleResetPassword} className="p-6 space-y-4">
               <button
@@ -555,6 +667,7 @@ export default function MaatramVolunteerHubPage() {
 
   const isAdminOrSuperAdmin =
     currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+  const isAdmin = currentUser.role === "ADMIN";
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
   const volunteers = users.filter((u) => u.role === "VOLUNTEER");
@@ -563,12 +676,16 @@ export default function MaatramVolunteerHubPage() {
     (u) => u.status === "PENDING_APPROVAL"
   ).length;
 
+  const leaderboardVolunteers = [...volunteers].sort(
+    (a, b) => b.points - a.points || b.verifiedHours - a.verifiedHours
+  );
+
   const handleUserApproval = (
     userId: string,
     nextStatus: "APPROVED" | "REJECTED",
     roleLabel: UserRole
   ) => {
-    if (!isAdminOrSuperAdmin) return;
+    if (roleLabel === "VOLUNTEER" && !isAdmin) return;
     if (roleLabel === "ADMIN" && !isSuperAdmin) return;
 
     setUsers((prev) =>
@@ -577,9 +694,64 @@ export default function MaatramVolunteerHubPage() {
     const target = users.find((u) => u.id === userId);
     if (target) {
       pushNotification(
-        `${roleLabel === "ADMIN" ? "Admin" : "Volunteer"} ${target.name} marked as ${nextStatus}`
+        `${roleLabel === "ADMIN" ? "Admin" : "Volunteer"} ${target.name} marked as ${nextStatus}`,
+        roleLabel === "ADMIN" ? ["SUPER_ADMIN"] : ["ADMIN"],
+        roleLabel === "VOLUNTEER" ? target.email : undefined
       );
     }
+  };
+
+  const handleAwardPointsToVolunteer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdminOrSuperAdmin) return;
+
+    const ptsToAdd = Math.max(0, Number(awardPoints) || 0);
+    const hrsToAdd = Math.max(0, Number(awardHours) || 0);
+    const targetUser = users.find(
+      (u) => u.email.toLowerCase() === awardTargetEmail.toLowerCase()
+    );
+
+    if (!targetUser) {
+      setAwardFeedback("Please select a valid volunteer.");
+      return;
+    }
+
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.email.toLowerCase() === targetUser.email.toLowerCase()
+          ? {
+              ...u,
+              points: u.points + ptsToAdd,
+              verifiedHours: u.verifiedHours + hrsToAdd,
+              completedActivities: u.completedActivities + 1,
+            }
+          : u
+      )
+    );
+
+    const newRecord: VolunteerActivityRecord = {
+      id: `act-${Date.now()}`,
+      volunteerEmail: targetUser.email,
+      activityTitle: awardActivityTitle.trim() || "Verified Volunteer Activity",
+      date: "2026-11-22",
+      hours: hrsToAdd,
+      pointsAwarded: ptsToAdd,
+      note: awardNote.trim() || "Awarded by admin",
+    };
+
+    setActivityHistory((prev) => [newRecord, ...prev]);
+    pushNotification(
+      `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs for ${awardActivityTitle.trim() || "activity"}`,
+      ["VOLUNTEER"],
+      targetUser.email
+    );
+    pushNotification(
+      `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs to ${targetUser.name}`,
+      ["ADMIN", "SUPER_ADMIN"]
+    );
+    setAwardFeedback(
+      `Awarded +${ptsToAdd} points and +${hrsToAdd} verified hours to ${targetUser.name}.`
+    );
   };
 
   const handleApplicationDecision = (
@@ -603,7 +775,13 @@ export default function MaatramVolunteerHubPage() {
         );
       }
       pushNotification(
-        `Application from ${appItem.volunteerName} ${decision.toLowerCase()} for ${appItem.opportunityTitle}`
+        `Your application for ${appItem.opportunityTitle} was ${decision.toLowerCase()}`,
+        ["VOLUNTEER"],
+        appItem.volunteerEmail
+      );
+      pushNotification(
+        `Application from ${appItem.volunteerName} ${decision.toLowerCase()} for ${appItem.opportunityTitle}`,
+        ["ADMIN", "SUPER_ADMIN"]
       );
     }
   };
@@ -617,9 +795,14 @@ export default function MaatramVolunteerHubPage() {
       ...newOppData,
       id: `opp-${Date.now()}`,
       filledSlots: 0,
+      defaultPoints: 80,
+      defaultHours: 5,
     };
     setOpportunities((prev) => [created, ...prev]);
-    pushNotification(`Created opportunity: ${created.title}`);
+    pushNotification(`Created opportunity: ${created.title}`, [
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
   };
 
   const handleVolunteerApply = (opp: Opportunity) => {
@@ -638,7 +821,31 @@ export default function MaatramVolunteerHubPage() {
       status: "PENDING",
     };
     setApplications((prev) => [newApp, ...prev]);
-    pushNotification(`${currentUser.name} applied for ${opp.title}`);
+    pushNotification(`${currentUser.name} applied for ${opp.title}`, ["ADMIN"]);
+  };
+
+  const handleWithdrawApplication = (appId: string) => {
+    const targetApp = applications.find(
+      (a) => a.id === appId && a.volunteerEmail === currentUser.email
+    );
+    if (!targetApp) return;
+
+    setApplications((prev) => prev.filter((a) => a.id !== appId));
+
+    if (targetApp.status === "APPROVED") {
+      setOpportunities((prev) =>
+        prev.map((o) =>
+          o.id === targetApp.opportunityId
+            ? { ...o, filledSlots: Math.max(0, o.filledSlots - 1) }
+            : o
+        )
+      );
+    }
+
+    pushNotification(
+      `${currentUser.name} removed application for ${targetApp.opportunityTitle}`,
+      ["ADMIN"]
+    );
   };
 
   const handleSavePhone = (e: React.FormEvent) => {
@@ -648,12 +855,22 @@ export default function MaatramVolunteerHubPage() {
         u.id === currentUser.id ? { ...u, phone: phoneInput } : u
       )
     );
-    pushNotification(`Updated phone number for ${currentUser.name}`);
+    setProfileSavedMsg("Profile contact details updated.");
+    pushNotification(
+      "Your contact phone number was updated",
+      ["VOLUNTEER"],
+      currentUser.email
+    );
   };
 
   const myApplications = applications.filter(
     (a) => a.volunteerEmail === currentUser.email
   );
+  const myHistory = activityHistory.filter(
+    (h) => h.volunteerEmail.toLowerCase() === currentUser.email.toLowerCase()
+  );
+  const volunteerBadges = getVolunteerBadges(currentUser);
+  const unlockedBadgeCount = volunteerBadges.filter((b) => b.unlocked).length;
 
   return (
     <div className="min-h-screen bg-[#F7F5F2] text-[#1F1624]">
@@ -662,19 +879,111 @@ export default function MaatramVolunteerHubPage() {
         onLogout={handleLogout}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        notifications={notifications}
+        notifications={visibleNotifications.map((n) => n.message)}
         showNotifications={showNotifications}
         onToggleNotifications={() => setShowNotifications((s) => !s)}
         onClearNotifications={() => setNotifications([])}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {isAdminOrSuperAdmin && activeTab === "dashboard" && (
-          <DashboardOverview
-            opportunities={opportunities}
-            volunteersCount={volunteers.length}
-            pendingApprovalsCount={pendingCount}
-          />
+          <>
+            <DashboardOverview
+              opportunities={opportunities}
+              volunteersCount={volunteers.length}
+              pendingApprovalsCount={pendingCount}
+            />
+
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <Award className="w-5 h-5 text-[#6F3577]" />
+                <h2 className="text-lg font-bold text-[#522A5B]">
+                  Award Points & Verified Hours to Volunteers
+                </h2>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">
+                Recognize volunteer participation—points automatically update
+                badges and the Volunteer Leaderboard.
+              </p>
+
+              {awardFeedback && (
+                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+                  {awardFeedback}
+                </div>
+              )}
+
+              <form
+                onSubmit={handleAwardPointsToVolunteer}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end"
+              >
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                    Volunteer
+                  </label>
+                  <select
+                    value={awardTargetEmail}
+                    onChange={(e) => setAwardTargetEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm bg-white focus:outline-none focus:border-[#6F3577]"
+                  >
+                    {volunteers.map((v) => (
+                      <option key={v.id} value={v.email}>
+                        {v.name} ({v.points} pts)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                    Activity / Reason
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={awardActivityTitle}
+                    onChange={(e) => setAwardActivityTitle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                    Points to Award
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={awardPoints}
+                    onChange={(e) => setAwardPoints(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                    Verified Hours
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    required
+                    value={awardHours}
+                    onChange={(e) => setAwardHours(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#6F3577] hover:bg-[#522A5B] text-white text-sm font-semibold transition cursor-pointer"
+                >
+                  Give Points
+                </button>
+              </form>
+            </div>
+          </>
         )}
 
         {isAdminOrSuperAdmin && activeTab === "opportunities" && (
@@ -691,7 +1000,7 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
-        {isAdminOrSuperAdmin && activeTab === "volunteers" && (
+        {isAdmin && activeTab === "volunteers" && (
           <UserApprovalsTable
             title="Volunteer Registration Requests"
             nameHeader="Name"
@@ -713,11 +1022,61 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
+        {currentUser.role === "VOLUNTEER" &&
+          activeTab === "volunteer-dashboard" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-[#522A5B]">
+                  Volunteer Dashboard
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Welcome back, {currentUser.name}—track your verified hours,
+                  earned points, and milestone badges.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase text-gray-500">
+                    Total Points
+                  </div>
+                  <div className="text-2xl font-extrabold text-[#6F3577] mt-1">
+                    {currentUser.points} pts
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase text-gray-500">
+                    Verified Hours
+                  </div>
+                  <div className="text-2xl font-extrabold text-[#522A5B] mt-1">
+                    {currentUser.verifiedHours} hrs
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase text-gray-500">
+                    Completed Activities
+                  </div>
+                  <div className="text-2xl font-extrabold text-[#1F1624] mt-1">
+                    {currentUser.completedActivities}
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase text-gray-500">
+                    Unlocked Badges
+                  </div>
+                  <div className="text-2xl font-extrabold text-amber-600 mt-1">
+                    {unlockedBadgeCount} / {volunteerBadges.length}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
         {currentUser.role === "VOLUNTEER" && activeTab === "browse" && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold text-[#522A5B]">
-                Available Volunteer Opportunities
+                Opportunity Explorer
               </h2>
               <p className="text-sm text-gray-600 mt-1">
                 Browse active Maatram initiatives and reserve your slot.
@@ -753,15 +1112,26 @@ export default function MaatramVolunteerHubPage() {
                       </p>
                     </div>
 
-                    <div className="pt-4 border-t border-[#F3EAF6] flex items-center justify-between">
+                    <div className="pt-4 border-t border-[#F3EAF6] flex items-center justify-between gap-2">
                       <div className="text-xs font-semibold text-[#522A5B]">
                         {remaining} of {opp.totalSlots} slots open
                       </div>
 
                       {existingApp ? (
-                        <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#F3EAF6] text-[#522A5B]">
-                          Status: {existingApp.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#F3EAF6] text-[#522A5B]">
+                            {existingApp.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleWithdrawApplication(existingApp.id)
+                            }
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -783,7 +1153,7 @@ export default function MaatramVolunteerHubPage() {
         {currentUser.role === "VOLUNTEER" && activeTab === "my-applications" && (
           <div className="bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-4">
-              My Volunteer Applications
+              My Applications
             </h2>
             {myApplications.length === 0 ? (
               <p className="text-sm text-gray-500">
@@ -796,6 +1166,7 @@ export default function MaatramVolunteerHubPage() {
                     <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
                       <th className="py-3 px-4">Opportunity</th>
                       <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -812,6 +1183,15 @@ export default function MaatramVolunteerHubPage() {
                             {app.status}
                           </span>
                         </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleWithdrawApplication(app.id)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition cursor-pointer"
+                          >
+                            Remove Application
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -821,14 +1201,198 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
+        {currentUser.role === "VOLUNTEER" && activeTab === "hours-history" && (
+          <div className="bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-xl font-bold text-[#522A5B] flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  <span>Hours & History</span>
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Verified hours and points awarded for your activities.
+                </p>
+              </div>
+              <div className="text-sm font-bold text-[#6F3577]">
+                Total: {currentUser.verifiedHours} hrs • {currentUser.points} pts
+              </div>
+            </div>
+
+            {myHistory.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No verified activity records yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
+                      <th className="py-3 px-4">Activity</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Hours</th>
+                      <th className="py-3 px-4">Points Awarded</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myHistory.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="border-b border-[#F3EAF6] text-sm"
+                      >
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-[#1F1624]">
+                            {item.activityTitle}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {item.note}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">{item.date}</td>
+                        <td className="py-3 px-4 font-semibold">
+                          {item.hours} hrs
+                        </td>
+                        <td className="py-3 px-4 font-bold text-[#6F3577]">
+                          +{item.pointsAwarded} pts
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentUser.role === "VOLUNTEER" &&
+          activeTab === "badges-leaderboard" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F1624]">
+                  Gamification & Leaderboard
+                </h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Recognizing consistent volunteer dedication.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+                <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>My Badges & Milestones</span>
+                </h3>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {volunteerBadges.map((badge) => (
+                    <div
+                      key={badge.id}
+                      className={`rounded-xl p-4 text-center border flex flex-col items-center justify-between gap-2 ${
+                        badge.unlocked
+                          ? "bg-[#FFFBEB] border-amber-200"
+                          : "bg-[#F9FAFB] border-gray-200 opacity-75"
+                      }`}
+                    >
+                      <div className="text-2xl">{badge.badgeText}</div>
+                      <div>
+                        <div className="text-xs font-bold text-[#1F1624]">
+                          {badge.title}
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">
+                          {badge.requirement}
+                        </div>
+                      </div>
+                      {badge.unlocked ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold uppercase">
+                          UNLOCKED
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold uppercase">
+                          LOCKED
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+                <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
+                  <Trophy className="w-4 h-4 text-amber-500" />
+                  <span>Volunteer Leaderboard</span>
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-[11px] font-bold uppercase text-gray-500">
+                        <th className="py-3 px-4">Rank</th>
+                        <th className="py-3 px-4">Volunteer</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4">Verified Hours</th>
+                        <th className="py-3 px-4 text-right">Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardVolunteers.map((vol, idx) => {
+                        const isMe = vol.id === currentUser.id;
+                        return (
+                          <tr
+                            key={vol.id}
+                            className={`border-b border-gray-100 text-sm ${
+                              isMe ? "bg-[#F3EAF6]/60" : ""
+                            }`}
+                          >
+                            <td className="py-3.5 px-4 font-bold">
+                              {idx === 0
+                                ? "🥇 #1"
+                                : idx === 1
+                                ? "🥈 #2"
+                                : idx === 2
+                                ? "🥉 #3"
+                                : `#${idx + 1}`}
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-[#1F1624]">
+                              {vol.name}{" "}
+                              {isMe && (
+                                <span className="ml-1.5 text-[11px] font-bold text-[#6F3577]">
+                                  (You)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-gray-600">
+                              {vol.categoryLabel || "Volunteer"}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-[#1F1624]">
+                              {vol.verifiedHours} hrs
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-extrabold text-amber-600">
+                              {vol.points} pts
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
         {currentUser.role === "VOLUNTEER" && activeTab === "profile" && (
           <div className="max-w-lg bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-1">
-              Volunteer Profile & Contact
+              Profile & Settings
             </h2>
             <p className="text-xs text-gray-500 mb-4">
               Update your contact phone number for event coordination.
             </p>
+
+            {profileSavedMsg && (
+              <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{profileSavedMsg}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSavePhone} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -867,7 +1431,7 @@ export default function MaatramVolunteerHubPage() {
                 type="submit"
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#7A4286] text-white hover:bg-[#522A5B] transition cursor-pointer"
               >
-                Save Phone Number
+                Save Settings
               </button>
             </form>
           </div>

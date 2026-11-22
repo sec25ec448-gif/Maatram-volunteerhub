@@ -1,14 +1,29 @@
 export type UserRole = "SUPER_ADMIN" | "ADMIN" | "VOLUNTEER";
 export type ApprovalStatus = "APPROVED" | "PENDING_APPROVAL" | "REJECTED";
 
+export interface VolunteerActivityRecord {
+  id: string;
+  volunteerEmail: string;
+  activityTitle: string;
+  date: string;
+  hours: number;
+  pointsAwarded: number;
+  note: string;
+}
+
 export interface UserAccount {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   phone: string;
   role: UserRole;
   status: ApprovalStatus;
+  categoryLabel?: string;
+  points: number;
+  verifiedHours: number;
+  completedActivities: number;
+  consecutiveWeeks?: number;
 }
 
 export interface Opportunity {
@@ -19,6 +34,8 @@ export interface Opportunity {
   date: string;
   totalSlots: number;
   filledSlots: number;
+  defaultPoints?: number;
+  defaultHours?: number;
 }
 
 export interface VolunteerApplication {
@@ -39,6 +56,10 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 43210",
     role: "SUPER_ADMIN",
     status: "APPROVED",
+    categoryLabel: "Leadership",
+    points: 0,
+    verifiedHours: 0,
+    completedActivities: 0,
   },
   {
     id: "u-2",
@@ -48,6 +69,10 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 43211",
     role: "ADMIN",
     status: "APPROVED",
+    categoryLabel: "Coordinator",
+    points: 0,
+    verifiedHours: 0,
+    completedActivities: 0,
   },
   {
     id: "u-3",
@@ -57,6 +82,10 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 43212",
     role: "ADMIN",
     status: "PENDING_APPROVAL",
+    categoryLabel: "Coordinator",
+    points: 0,
+    verifiedHours: 0,
+    completedActivities: 0,
   },
   {
     id: "u-4",
@@ -66,6 +95,11 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 00001",
     role: "VOLUNTEER",
     status: "APPROVED",
+    categoryLabel: "Student",
+    points: 340,
+    verifiedHours: 24,
+    completedActivities: 4,
+    consecutiveWeeks: 3,
   },
   {
     id: "u-5",
@@ -75,6 +109,11 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 00002",
     role: "VOLUNTEER",
     status: "APPROVED",
+    categoryLabel: "Alumni",
+    points: 520,
+    verifiedHours: 36,
+    completedActivities: 7,
+    consecutiveWeeks: 4,
   },
   {
     id: "u-6",
@@ -84,6 +123,11 @@ export const INITIAL_USERS: UserAccount[] = [
     phone: "+91 98765 00003",
     role: "VOLUNTEER",
     status: "PENDING_APPROVAL",
+    categoryLabel: "Volunteer",
+    points: 110,
+    verifiedHours: 8,
+    completedActivities: 1,
+    consecutiveWeeks: 1,
   },
 ];
 
@@ -96,6 +140,8 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
     date: "2026-12-05",
     totalSlots: 25,
     filledSlots: 18,
+    defaultPoints: 100,
+    defaultHours: 6,
   },
   {
     id: "opp-2",
@@ -105,6 +151,8 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
     date: "2026-12-12",
     totalSlots: 20,
     filledSlots: 12,
+    defaultPoints: 80,
+    defaultHours: 5,
   },
 ];
 
@@ -124,5 +172,26 @@ export const INITIAL_APPLICATIONS: VolunteerApplication[] = [
     volunteerName: "Anitha Ramesh",
     volunteerEmail: "anitha@volunteer.org",
     status: "PENDING",
+  },
+];
+
+export const INITIAL_ACTIVITY_HISTORY: VolunteerActivityRecord[] = [
+  {
+    id: "act-1",
+    volunteerEmail: "priya@alumni.com",
+    activityTitle: "Alumni Career Guidance Session",
+    date: "2026-11-08",
+    hours: 12,
+    pointsAwarded: 220,
+    note: "Verified mentorship session & feedback review",
+  },
+  {
+    id: "act-2",
+    volunteerEmail: "karthik@student.edu",
+    activityTitle: "Weekend Career Mentorship Drive",
+    date: "2026-11-14",
+    hours: 8,
+    pointsAwarded: 140,
+    note: "Student coordination & session support",
   },
 ];

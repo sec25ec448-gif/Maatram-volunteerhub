@@ -9,8 +9,10 @@ import {
   Users,
   ShieldCheck,
   LogOut,
-  Briefcase,
+  Search,
   FileText,
+  Clock,
+  Trophy,
   UserCog,
 } from "lucide-react";
 import { UserAccount } from "@/data/mockData";
@@ -21,8 +23,11 @@ export type ActiveTab =
   | "applications"
   | "volunteers"
   | "admins"
+  | "volunteer-dashboard"
   | "browse"
   | "my-applications"
+  | "hours-history"
+  | "badges-leaderboard"
   | "profile";
 
 interface PortalHeaderProps {
@@ -57,9 +62,14 @@ export default function PortalHeader({
     currentUser.role === "VOLUNTEER"
       ? [
           {
+            id: "volunteer-dashboard",
+            label: "Volunteer Dashboard",
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
             id: "browse",
-            label: "Browse Opportunities",
-            icon: <Briefcase className="w-4 h-4" />,
+            label: "Opportunity Explorer",
+            icon: <Search className="w-4 h-4" />,
           },
           {
             id: "my-applications",
@@ -67,8 +77,18 @@ export default function PortalHeader({
             icon: <FileText className="w-4 h-4" />,
           },
           {
+            id: "hours-history",
+            label: "Hours & History",
+            icon: <Clock className="w-4 h-4" />,
+          },
+          {
+            id: "badges-leaderboard",
+            label: "Badges & Leaderboard",
+            icon: <Trophy className="w-4 h-4" />,
+          },
+          {
             id: "profile",
-            label: "My Settings",
+            label: "Profile & Settings",
             icon: <UserCog className="w-4 h-4" />,
           },
         ]
@@ -88,11 +108,15 @@ export default function PortalHeader({
             label: "Applications & Applicants",
             icon: <ClipboardCheck className="w-4 h-4" />,
           },
-          {
-            id: "volunteers",
-            label: "Approve & Manage Volunteers",
-            icon: <Users className="w-4 h-4" />,
-          },
+          ...(currentUser.role === "ADMIN"
+            ? [
+                {
+                  id: "volunteers" as ActiveTab,
+                  label: "Approve & Manage Volunteers",
+                  icon: <Users className="w-4 h-4" />,
+                },
+              ]
+            : []),
           ...(currentUser.role === "SUPER_ADMIN"
             ? [
                 {
@@ -134,7 +158,9 @@ export default function PortalHeader({
           <div className="text-right hidden sm:block">
             <div className="text-sm font-semibold">{currentUser.name}</div>
             <div className="text-xs text-[#F3EAF6]/80">
-              {currentUser.email}
+              {currentUser.role === "VOLUNTEER"
+                ? `${currentUser.points} pts • ${currentUser.verifiedHours} hrs`
+                : currentUser.email}
             </div>
           </div>
 
