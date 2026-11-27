@@ -15,6 +15,9 @@ import {
   Clock,
   CheckCircle2,
   Sparkles,
+  GraduationCap,
+  Briefcase,
+  Calendar,
 } from "lucide-react";
 import PortalHeader, { ActiveTab } from "@/components/PortalHeader";
 import DashboardOverview from "@/components/DashboardOverview";
@@ -41,8 +44,12 @@ interface AppNotification {
 }
 
 const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = {
-  VOLUNTEER: {
+  STUDENT_VOLUNTEER: {
     email: "karthik@student.edu",
+    password: "Volunteer@123",
+  },
+  ALUMNI_VOLUNTEER: {
+    email: "priya@alumni.com",
     password: "Volunteer@123",
   },
   ADMIN: {
@@ -54,6 +61,10 @@ const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = 
     password: "Super@123",
   },
 };
+
+function isVolunteerRole(role: UserRole) {
+  return role === "STUDENT_VOLUNTEER" || role === "ALUMNI_VOLUNTEER";
+}
 
 function getVolunteerBadges(user: UserAccount) {
   return [
@@ -116,26 +127,33 @@ export default function MaatramVolunteerHubPage() {
   const [authMode, setAuthMode] = useState<"signin" | "register" | "forgot">(
     "signin"
   );
-  const [selectedRole, setSelectedRole] = useState<UserRole>("VOLUNTEER");
+  const [selectedRole, setSelectedRole] =
+    useState<UserRole>("STUDENT_VOLUNTEER");
   const [isDemoPrefilled, setIsDemoPrefilled] = useState<boolean>(true);
 
   const [emailInput, setEmailInput] = useState(
-    DEMO_CREDENTIALS.VOLUNTEER.email
+    DEMO_CREDENTIALS.STUDENT_VOLUNTEER.email
   );
   const [passwordInput, setPasswordInput] = useState(
-    DEMO_CREDENTIALS.VOLUNTEER.password
+    DEMO_CREDENTIALS.STUDENT_VOLUNTEER.password
   );
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
+  // Register state
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
   const [regPassword, setRegPassword] = useState("");
+  const [regCollege, setRegCollege] = useState("");
+  const [regDesignation, setRegDesignation] = useState("");
+  const [regYearOfPassedOut, setRegYearOfPassedOut] = useState("");
 
+  // Forgot password state
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
+  // Admin point award form state
   const [awardTargetEmail, setAwardTargetEmail] = useState("karthik@student.edu");
   const [awardPoints, setAwardPoints] = useState<number>(50);
   const [awardHours, setAwardHours] = useState<number>(3);
@@ -149,7 +167,7 @@ export default function MaatramVolunteerHubPage() {
   const [notifications, setNotifications] = useState<AppNotification[]>([
     {
       id: "n-1",
-      message: "New volunteer registration request: Anitha Ramesh",
+      message: "New student volunteer registration request: Anitha Ramesh",
       forRoles: ["ADMIN"],
     },
     {
@@ -159,7 +177,12 @@ export default function MaatramVolunteerHubPage() {
     },
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Profile edit state
   const [phoneInput, setPhoneInput] = useState("");
+  const [collegeInput, setCollegeInput] = useState("");
+  const [designationInput, setDesignationInput] = useState("");
+  const [yearOfPassedOutInput, setYearOfPassedOutInput] = useState("");
   const [profileSavedMsg, setProfileSavedMsg] = useState<string | null>(null);
 
   const currentUser = users.find((u) => u.id === currentUserId) || null;
@@ -217,7 +240,7 @@ export default function MaatramVolunteerHubPage() {
     if (matchedUser.role !== selectedRole) {
       setAuthError(
         `This account belongs to ${matchedUser.role.replace(
-          "_",
+          /_/g,
           " "
         )}. Please select the matching portal role above.`
       );
@@ -226,7 +249,7 @@ export default function MaatramVolunteerHubPage() {
 
     if (matchedUser.status === "PENDING_APPROVAL") {
       setAuthError(
-        matchedUser.role === "VOLUNTEER"
+        isVolunteerRole(matchedUser.role)
           ? "Your volunteer request is pending admin approval. You can access the portal once approved by an admin."
           : "Your account is pending approval. Please check back once approved."
       );
@@ -240,9 +263,12 @@ export default function MaatramVolunteerHubPage() {
 
     setCurrentUserId(matchedUser.id);
     setPhoneInput(matchedUser.phone);
+    setCollegeInput(matchedUser.college || "");
+    setDesignationInput(matchedUser.designation || "");
+    setYearOfPassedOutInput(matchedUser.yearOfPassedOut || "");
     setProfileSavedMsg(null);
     setActiveTab(
-      matchedUser.role === "VOLUNTEER" ? "volunteer-dashboard" : "dashboard"
+      isVolunteerRole(matchedUser.role) ? "volunteer-dashboard" : "dashboard"
     );
   };
 
@@ -260,6 +286,13 @@ export default function MaatramVolunteerHubPage() {
     const assignedRole: UserRole =
       selectedRole === "SUPER_ADMIN" ? "ADMIN" : selectedRole;
 
+    const categoryLabel =
+      assignedRole === "STUDENT_VOLUNTEER"
+        ? "Student Volunteer"
+        : assignedRole === "ALUMNI_VOLUNTEER"
+        ? "Alumni Volunteer"
+        : "Coordinator";
+
     const newUser: UserAccount = {
       id: `u-${Date.now()}`,
       name: regName.trim(),
@@ -268,7 +301,16 @@ export default function MaatramVolunteerHubPage() {
       phone: regPhone.trim(),
       role: assignedRole,
       status: "PENDING_APPROVAL",
-      categoryLabel: assignedRole === "VOLUNTEER" ? "Volunteer" : "Coordinator",
+      categoryLabel,
+      college:
+        assignedRole === "STUDENT_VOLUNTEER" ? regCollege.trim() : undefined,
+      designation:
+        assignedRole === "ALUMNI_VOLUNTEER"
+          ? regDesignation.trim()
+          : undefined,
+      yearOfPassedOut: isVolunteerRole(assignedRole)
+        ? regYearOfPassedOut.trim()
+        : undefined,
       points: 0,
       verifiedHours: 0,
       completedActivities: 0,
@@ -277,17 +319,20 @@ export default function MaatramVolunteerHubPage() {
 
     setUsers((prev) => [...prev, newUser]);
     pushNotification(
-      `New ${newUser.role.toLowerCase()} registration request: ${newUser.name}`,
+      `New ${categoryLabel.toLowerCase()} registration request: ${newUser.name}`,
       assignedRole === "ADMIN" ? ["SUPER_ADMIN"] : ["ADMIN"]
     );
     setRegName("");
     setRegEmail("");
     setRegPhone("");
     setRegPassword("");
+    setRegCollege("");
+    setRegDesignation("");
+    setRegYearOfPassedOut("");
     setAuthMode("signin");
     setAuthSuccess(
-      assignedRole === "VOLUNTEER"
-        ? "Volunteer request submitted! You can sign in once an admin approves your request."
+      isVolunteerRole(assignedRole)
+        ? `${categoryLabel} request submitted! You can sign in once an admin approves your request.`
         : "Admin request submitted! You can sign in once a super admin approves your request."
     );
   };
@@ -335,7 +380,8 @@ export default function MaatramVolunteerHubPage() {
 
   if (!currentUser) {
     const roleLabelMap: Record<UserRole, string> = {
-      VOLUNTEER: "VOLUNTEER",
+      STUDENT_VOLUNTEER: "STUDENT VOLUNTEER",
+      ALUMNI_VOLUNTEER: "ALUMNI VOLUNTEER",
       ADMIN: "ADMIN",
       SUPER_ADMIN: "SUPER ADMIN",
     };
@@ -395,26 +441,31 @@ export default function MaatramVolunteerHubPage() {
               <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2.5">
                 SELECT PORTAL ROLE
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {(["VOLUNTEER", "ADMIN", "SUPER_ADMIN"] as UserRole[]).map(
-                  (role) => {
-                    const active = selectedRole === role;
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => handleSelectLoginRole(role)}
-                        className={`py-2 px-2 rounded-full text-xs font-bold uppercase tracking-wide transition cursor-pointer border ${
-                          active
-                            ? "bg-[#F3EAF6] text-[#5A2961] border-[#6F3577] shadow-2xs"
-                            : "bg-white text-gray-600 border-gray-200 hover:border-[#C8B2D0]"
-                        }`}
-                      >
-                        {roleLabelMap[role]}
-                      </button>
-                    );
-                  }
-                )}
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    "STUDENT_VOLUNTEER",
+                    "ALUMNI_VOLUNTEER",
+                    "ADMIN",
+                    "SUPER_ADMIN",
+                  ] as UserRole[]
+                ).map((role) => {
+                  const active = selectedRole === role;
+                  return (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleSelectLoginRole(role)}
+                      className={`py-2 px-2.5 rounded-full text-[11px] font-bold uppercase tracking-wide transition cursor-pointer border ${
+                        active
+                          ? "bg-[#F3EAF6] text-[#5A2961] border-[#6F3577] shadow-2xs"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-[#C8B2D0]"
+                      }`}
+                    >
+                      {roleLabelMap[role]}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -561,6 +612,82 @@ export default function MaatramVolunteerHubPage() {
                 </div>
               </div>
 
+              {selectedRole === "STUDENT_VOLUNTEER" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                      College Name
+                    </label>
+                    <div className="relative">
+                      <GraduationCap className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        required
+                        value={regCollege}
+                        onChange={(e) => setRegCollege(e.target.value)}
+                        placeholder="e.g., College of Engineering, Guindy"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                      Year of Passed Out
+                    </label>
+                    <div className="relative">
+                      <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        required
+                        value={regYearOfPassedOut}
+                        onChange={(e) => setRegYearOfPassedOut(e.target.value)}
+                        placeholder="e.g., 2027"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {selectedRole === "ALUMNI_VOLUNTEER" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                      Designation
+                    </label>
+                    <div className="relative">
+                      <Briefcase className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        required
+                        value={regDesignation}
+                        onChange={(e) => setRegDesignation(e.target.value)}
+                        placeholder="e.g., Software Engineer / Product Manager"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F1624] mb-1">
+                      Year of Passed Out
+                    </label>
+                    <div className="relative">
+                      <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        required
+                        value={regYearOfPassedOut}
+                        onChange={(e) => setRegYearOfPassedOut(e.target.value)}
+                        placeholder="e.g., 2022"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#6F3577]"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-[#1F1624] mb-1">
                   Create Password
@@ -669,8 +796,9 @@ export default function MaatramVolunteerHubPage() {
     currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
   const isAdmin = currentUser.role === "ADMIN";
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const isCurrentUserVolunteer = isVolunteerRole(currentUser.role);
 
-  const volunteers = users.filter((u) => u.role === "VOLUNTEER");
+  const volunteers = users.filter((u) => isVolunteerRole(u.role));
   const admins = users.filter((u) => u.role === "ADMIN");
   const pendingCount = users.filter(
     (u) => u.status === "PENDING_APPROVAL"
@@ -685,7 +813,7 @@ export default function MaatramVolunteerHubPage() {
     nextStatus: "APPROVED" | "REJECTED",
     roleLabel: UserRole
   ) => {
-    if (roleLabel === "VOLUNTEER" && !isAdmin) return;
+    if (isVolunteerRole(roleLabel) && !isAdmin) return;
     if (roleLabel === "ADMIN" && !isSuperAdmin) return;
 
     setUsers((prev) =>
@@ -696,7 +824,7 @@ export default function MaatramVolunteerHubPage() {
       pushNotification(
         `${roleLabel === "ADMIN" ? "Admin" : "Volunteer"} ${target.name} marked as ${nextStatus}`,
         roleLabel === "ADMIN" ? ["SUPER_ADMIN"] : ["ADMIN"],
-        roleLabel === "VOLUNTEER" ? target.email : undefined
+        isVolunteerRole(roleLabel) ? target.email : undefined
       );
     }
   };
@@ -733,7 +861,7 @@ export default function MaatramVolunteerHubPage() {
       id: `act-${Date.now()}`,
       volunteerEmail: targetUser.email,
       activityTitle: awardActivityTitle.trim() || "Verified Volunteer Activity",
-      date: "2026-11-22",
+      date: "2026-11-27",
       hours: hrsToAdd,
       pointsAwarded: ptsToAdd,
       note: awardNote.trim() || "Awarded by admin",
@@ -742,7 +870,7 @@ export default function MaatramVolunteerHubPage() {
     setActivityHistory((prev) => [newRecord, ...prev]);
     pushNotification(
       `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs for ${awardActivityTitle.trim() || "activity"}`,
-      ["VOLUNTEER"],
+      ["STUDENT_VOLUNTEER", "ALUMNI_VOLUNTEER"],
       targetUser.email
     );
     pushNotification(
@@ -776,7 +904,7 @@ export default function MaatramVolunteerHubPage() {
       }
       pushNotification(
         `Your application for ${appItem.opportunityTitle} was ${decision.toLowerCase()}`,
-        ["VOLUNTEER"],
+        ["STUDENT_VOLUNTEER", "ALUMNI_VOLUNTEER"],
         appItem.volunteerEmail
       );
       pushNotification(
@@ -848,17 +976,31 @@ export default function MaatramVolunteerHubPage() {
     );
   };
 
-  const handleSavePhone = (e: React.FormEvent) => {
+  const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     setUsers((prev) =>
       prev.map((u) =>
-        u.id === currentUser.id ? { ...u, phone: phoneInput } : u
+        u.id === currentUser.id
+          ? {
+              ...u,
+              phone: phoneInput,
+              college:
+                currentUser.role === "STUDENT_VOLUNTEER"
+                  ? collegeInput.trim()
+                  : u.college,
+              designation:
+                currentUser.role === "ALUMNI_VOLUNTEER"
+                  ? designationInput.trim()
+                  : u.designation,
+              yearOfPassedOut: yearOfPassedOutInput.trim(),
+            }
+          : u
       )
     );
-    setProfileSavedMsg("Profile contact details updated.");
+    setProfileSavedMsg("Profile settings updated successfully.");
     pushNotification(
-      "Your contact phone number was updated",
-      ["VOLUNTEER"],
+      "Your profile details were updated",
+      ["STUDENT_VOLUNTEER", "ALUMNI_VOLUNTEER"],
       currentUser.email
     );
   };
@@ -927,7 +1069,7 @@ export default function MaatramVolunteerHubPage() {
                   >
                     {volunteers.map((v) => (
                       <option key={v.id} value={v.email}>
-                        {v.name} ({v.points} pts)
+                        {v.name} ({v.categoryLabel}) • {v.points} pts
                       </option>
                     ))}
                   </select>
@@ -1002,10 +1144,10 @@ export default function MaatramVolunteerHubPage() {
 
         {isAdmin && activeTab === "volunteers" && (
           <UserApprovalsTable
-            title="Volunteer Registration Requests"
+            title="Volunteer Registration Requests (Student & Alumni)"
             nameHeader="Name"
             approveLabel="Approve"
-            roleType="VOLUNTEER"
+            roleType="STUDENT_VOLUNTEER"
             users={volunteers}
             onApproveUser={handleUserApproval}
           />
@@ -1022,57 +1164,63 @@ export default function MaatramVolunteerHubPage() {
           />
         )}
 
-        {currentUser.role === "VOLUNTEER" &&
-          activeTab === "volunteer-dashboard" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-[#522A5B]">
-                  Volunteer Dashboard
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Welcome back, {currentUser.name}—track your verified hours,
-                  earned points, and milestone badges.
-                </p>
-              </div>
+        {isCurrentUserVolunteer && activeTab === "volunteer-dashboard" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-[#522A5B]">
+                Volunteer Dashboard
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Welcome back, {currentUser.name} (
+                {currentUser.role === "STUDENT_VOLUNTEER"
+                  ? `${currentUser.college || "Student"} • Class of ${
+                      currentUser.yearOfPassedOut || "—"
+                    }`
+                  : `${currentUser.designation || "Alumni"} • Class of ${
+                      currentUser.yearOfPassedOut || "—"
+                    }`}
+                )
+              </p>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                  <div className="text-xs font-semibold uppercase text-gray-500">
-                    Total Points
-                  </div>
-                  <div className="text-2xl font-extrabold text-[#6F3577] mt-1">
-                    {currentUser.points} pts
-                  </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Total Points
                 </div>
-                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                  <div className="text-xs font-semibold uppercase text-gray-500">
-                    Verified Hours
-                  </div>
-                  <div className="text-2xl font-extrabold text-[#522A5B] mt-1">
-                    {currentUser.verifiedHours} hrs
-                  </div>
+                <div className="text-2xl font-extrabold text-[#6F3577] mt-1">
+                  {currentUser.points} pts
                 </div>
-                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                  <div className="text-xs font-semibold uppercase text-gray-500">
-                    Completed Activities
-                  </div>
-                  <div className="text-2xl font-extrabold text-[#1F1624] mt-1">
-                    {currentUser.completedActivities}
-                  </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Verified Hours
                 </div>
-                <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                  <div className="text-xs font-semibold uppercase text-gray-500">
-                    Unlocked Badges
-                  </div>
-                  <div className="text-2xl font-extrabold text-amber-600 mt-1">
-                    {unlockedBadgeCount} / {volunteerBadges.length}
-                  </div>
+                <div className="text-2xl font-extrabold text-[#522A5B] mt-1">
+                  {currentUser.verifiedHours} hrs
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Completed Activities
+                </div>
+                <div className="text-2xl font-extrabold text-[#1F1624] mt-1">
+                  {currentUser.completedActivities}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Unlocked Badges
+                </div>
+                <div className="text-2xl font-extrabold text-amber-600 mt-1">
+                  {unlockedBadgeCount} / {volunteerBadges.length}
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-        {currentUser.role === "VOLUNTEER" && activeTab === "browse" && (
+        {isCurrentUserVolunteer && activeTab === "browse" && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold text-[#522A5B]">
@@ -1150,7 +1298,7 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
-        {currentUser.role === "VOLUNTEER" && activeTab === "my-applications" && (
+        {isCurrentUserVolunteer && activeTab === "my-applications" && (
           <div className="bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-4">
               My Applications
@@ -1201,7 +1349,7 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
-        {currentUser.role === "VOLUNTEER" && activeTab === "hours-history" && (
+        {isCurrentUserVolunteer && activeTab === "hours-history" && (
           <div className="bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1263,127 +1411,130 @@ export default function MaatramVolunteerHubPage() {
           </div>
         )}
 
-        {currentUser.role === "VOLUNTEER" &&
-          activeTab === "badges-leaderboard" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-[#1F1624]">
-                  Gamification & Leaderboard
-                </h2>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Recognizing consistent volunteer dedication.
-                </p>
-              </div>
+        {isCurrentUserVolunteer && activeTab === "badges-leaderboard" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-[#1F1624]">
+                Gamification & Leaderboard
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Recognizing consistent volunteer dedication.
+              </p>
+            </div>
 
-              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
-                <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>My Badges & Milestones</span>
-                </h3>
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+              <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>My Badges & Milestones</span>
+              </h3>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {volunteerBadges.map((badge) => (
-                    <div
-                      key={badge.id}
-                      className={`rounded-xl p-4 text-center border flex flex-col items-center justify-between gap-2 ${
-                        badge.unlocked
-                          ? "bg-[#FFFBEB] border-amber-200"
-                          : "bg-[#F9FAFB] border-gray-200 opacity-75"
-                      }`}
-                    >
-                      <div className="text-2xl">{badge.badgeText}</div>
-                      <div>
-                        <div className="text-xs font-bold text-[#1F1624]">
-                          {badge.title}
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          {badge.requirement}
-                        </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {volunteerBadges.map((badge) => (
+                  <div
+                    key={badge.id}
+                    className={`rounded-xl p-4 text-center border flex flex-col items-center justify-between gap-2 ${
+                      badge.unlocked
+                        ? "bg-[#FFFBEB] border-amber-200"
+                        : "bg-[#F9FAFB] border-gray-200 opacity-75"
+                    }`}
+                  >
+                    <div className="text-2xl">{badge.badgeText}</div>
+                    <div>
+                      <div className="text-xs font-bold text-[#1F1624]">
+                        {badge.title}
                       </div>
-                      {badge.unlocked ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold uppercase">
-                          UNLOCKED
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold uppercase">
-                          LOCKED
-                        </span>
-                      )}
+                      <div className="text-[11px] text-gray-500 mt-0.5">
+                        {badge.requirement}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
-                <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
-                  <Trophy className="w-4 h-4 text-amber-500" />
-                  <span>Volunteer Leaderboard</span>
-                </h3>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-[11px] font-bold uppercase text-gray-500">
-                        <th className="py-3 px-4">Rank</th>
-                        <th className="py-3 px-4">Volunteer</th>
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4">Verified Hours</th>
-                        <th className="py-3 px-4 text-right">Points</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardVolunteers.map((vol, idx) => {
-                        const isMe = vol.id === currentUser.id;
-                        return (
-                          <tr
-                            key={vol.id}
-                            className={`border-b border-gray-100 text-sm ${
-                              isMe ? "bg-[#F3EAF6]/60" : ""
-                            }`}
-                          >
-                            <td className="py-3.5 px-4 font-bold">
-                              {idx === 0
-                                ? "🥇 #1"
-                                : idx === 1
-                                ? "🥈 #2"
-                                : idx === 2
-                                ? "🥉 #3"
-                                : `#${idx + 1}`}
-                            </td>
-                            <td className="py-3.5 px-4 font-semibold text-[#1F1624]">
-                              {vol.name}{" "}
-                              {isMe && (
-                                <span className="ml-1.5 text-[11px] font-bold text-[#6F3577]">
-                                  (You)
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3.5 px-4 text-gray-600">
-                              {vol.categoryLabel || "Volunteer"}
-                            </td>
-                            <td className="py-3.5 px-4 font-bold text-[#1F1624]">
-                              {vol.verifiedHours} hrs
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-extrabold text-amber-600">
-                              {vol.points} pts
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                    {badge.unlocked ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold uppercase">
+                        UNLOCKED
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold uppercase">
+                        LOCKED
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
-          )}
 
-        {currentUser.role === "VOLUNTEER" && activeTab === "profile" && (
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+              <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2 mb-4">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                <span>Volunteer Leaderboard</span>
+              </h3>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-[11px] font-bold uppercase text-gray-500">
+                      <th className="py-3 px-4">Rank</th>
+                      <th className="py-3 px-4">Volunteer</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">Verified Hours</th>
+                      <th className="py-3 px-4 text-right">Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboardVolunteers.map((vol, idx) => {
+                      const isMe = vol.id === currentUser.id;
+                      return (
+                        <tr
+                          key={vol.id}
+                          className={`border-b border-gray-100 text-sm ${
+                            isMe ? "bg-[#F3EAF6]/60" : ""
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 font-bold">
+                            {idx === 0
+                              ? "🥇 #1"
+                              : idx === 1
+                              ? "🥈 #2"
+                              : idx === 2
+                              ? "🥉 #3"
+                              : `#${idx + 1}`}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-[#1F1624]">
+                            {vol.name}{" "}
+                            {isMe && (
+                              <span className="ml-1.5 text-[11px] font-bold text-[#6F3577]">
+                                (You)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-gray-600">
+                            {vol.role === "ALUMNI_VOLUNTEER"
+                              ? "Alumni"
+                              : "Student"}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-[#1F1624]">
+                            {vol.verifiedHours} hrs
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-extrabold text-amber-600">
+                            {vol.points} pts
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isCurrentUserVolunteer && activeTab === "profile" && (
           <div className="max-w-lg bg-white rounded-xl border border-[#E5D8EC] p-6 shadow-sm">
             <h2 className="text-xl font-bold text-[#522A5B] mb-1">
               Profile & Settings
             </h2>
             <p className="text-xs text-gray-500 mb-4">
-              Update your contact phone number for event coordination.
+              {currentUser.role === "STUDENT_VOLUNTEER"
+                ? "Manage your student volunteer contact details, college, and year of passed out."
+                : "Manage your alumni volunteer contact details, designation, and year of passed out."}
             </p>
 
             {profileSavedMsg && (
@@ -1393,7 +1544,7 @@ export default function MaatramVolunteerHubPage() {
               </div>
             )}
 
-            <form onSubmit={handleSavePhone} className="space-y-4">
+            <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Full Name
@@ -1405,6 +1556,23 @@ export default function MaatramVolunteerHubPage() {
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm"
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Volunteer Type
+                </label>
+                <input
+                  type="text"
+                  value={
+                    currentUser.role === "STUDENT_VOLUNTEER"
+                      ? "Student Volunteer"
+                      : "Alumni Volunteer"
+                  }
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Email
@@ -1416,17 +1584,84 @@ export default function MaatramVolunteerHubPage() {
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm"
                 />
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Phone Number
                 </label>
                 <input
                   type="text"
+                  required
                   value={phoneInput}
                   onChange={(e) => setPhoneInput(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#7A4286]"
                 />
               </div>
+
+              {currentUser.role === "STUDENT_VOLUNTEER" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      College Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={collegeInput}
+                      onChange={(e) => setCollegeInput(e.target.value)}
+                      placeholder="Enter your college name"
+                      className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#7A4286]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Year of Passed Out
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={yearOfPassedOutInput}
+                      onChange={(e) => setYearOfPassedOutInput(e.target.value)}
+                      placeholder="e.g., 2027"
+                      className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#7A4286]"
+                    />
+                  </div>
+                </>
+              )}
+
+              {currentUser.role === "ALUMNI_VOLUNTEER" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Designation
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={designationInput}
+                      onChange={(e) => setDesignationInput(e.target.value)}
+                      placeholder="Enter your designation"
+                      className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#7A4286]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Year of Passed Out
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={yearOfPassedOutInput}
+                      onChange={(e) => setYearOfPassedOutInput(e.target.value)}
+                      placeholder="e.g., 2022"
+                      className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#7A4286]"
+                    />
+                  </div>
+                </>
+              )}
+
               <button
                 type="submit"
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#7A4286] text-white hover:bg-[#522A5B] transition cursor-pointer"

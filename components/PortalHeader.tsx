@@ -51,15 +51,21 @@ export default function PortalHeader({
   onToggleNotifications,
   onClearNotifications,
 }: PortalHeaderProps) {
+  const isVolunteer =
+    currentUser.role === "STUDENT_VOLUNTEER" ||
+    currentUser.role === "ALUMNI_VOLUNTEER";
+
   const portalSubtitle =
     currentUser.role === "SUPER_ADMIN"
       ? "SUPER ADMIN PORTAL"
       : currentUser.role === "ADMIN"
       ? "ADMIN PORTAL"
-      : "VOLUNTEER PORTAL";
+      : currentUser.role === "STUDENT_VOLUNTEER"
+      ? "STUDENT VOLUNTEER PORTAL"
+      : "ALUMNI VOLUNTEER PORTAL";
 
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] =
-    currentUser.role === "VOLUNTEER"
+    isVolunteer
       ? [
           {
             id: "volunteer-dashboard",
@@ -158,7 +164,7 @@ export default function PortalHeader({
           <div className="text-right hidden sm:block">
             <div className="text-sm font-semibold">{currentUser.name}</div>
             <div className="text-xs text-[#F3EAF6]/80">
-              {currentUser.role === "VOLUNTEER"
+              {isVolunteer
                 ? `${currentUser.points} pts • ${currentUser.verifiedHours} hrs`
                 : currentUser.email}
             </div>

@@ -1,4 +1,9 @@
-export type UserRole = "SUPER_ADMIN" | "ADMIN" | "VOLUNTEER";
+export type UserRole =
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "STUDENT_VOLUNTEER"
+  | "ALUMNI_VOLUNTEER";
+
 export type ApprovalStatus = "APPROVED" | "PENDING_APPROVAL" | "REJECTED";
 
 export interface VolunteerActivityRecord {
@@ -20,6 +25,9 @@ export interface UserAccount {
   role: UserRole;
   status: ApprovalStatus;
   categoryLabel?: string;
+  college?: string;
+  designation?: string;
+  yearOfPassedOut?: string;
   points: number;
   verifiedHours: number;
   completedActivities: number;
@@ -93,9 +101,11 @@ export const INITIAL_USERS: UserAccount[] = [
     email: "karthik@student.edu",
     password: "Volunteer@123",
     phone: "+91 98765 00001",
-    role: "VOLUNTEER",
+    role: "STUDENT_VOLUNTEER",
     status: "APPROVED",
-    categoryLabel: "Student",
+    categoryLabel: "Student Volunteer",
+    college: "College of Engineering, Guindy",
+    yearOfPassedOut: "2027",
     points: 340,
     verifiedHours: 24,
     completedActivities: 4,
@@ -107,9 +117,11 @@ export const INITIAL_USERS: UserAccount[] = [
     email: "priya@alumni.com",
     password: "Volunteer@123",
     phone: "+91 98765 00002",
-    role: "VOLUNTEER",
+    role: "ALUMNI_VOLUNTEER",
     status: "APPROVED",
-    categoryLabel: "Alumni",
+    categoryLabel: "Alumni Volunteer",
+    designation: "Senior Software Engineer",
+    yearOfPassedOut: "2022",
     points: 520,
     verifiedHours: 36,
     completedActivities: 7,
@@ -121,9 +133,11 @@ export const INITIAL_USERS: UserAccount[] = [
     email: "anitha@volunteer.org",
     password: "Volunteer@123",
     phone: "+91 98765 00003",
-    role: "VOLUNTEER",
+    role: "STUDENT_VOLUNTEER",
     status: "PENDING_APPROVAL",
-    categoryLabel: "Volunteer",
+    categoryLabel: "Student Volunteer",
+    college: "SSN College of Engineering",
+    yearOfPassedOut: "2028",
     points: 110,
     verifiedHours: 8,
     completedActivities: 1,
