@@ -14,6 +14,8 @@ import {
   Clock,
   Trophy,
   UserCog,
+  Building2,
+  FileSpreadsheet,
 } from "lucide-react";
 import { UserAccount } from "@/data/mockData";
 
@@ -23,6 +25,8 @@ export type ActiveTab =
   | "applications"
   | "volunteers"
   | "admins"
+  | "college-stats"
+  | "csv-ideas"
   | "volunteer-dashboard"
   | "browse"
   | "my-applications"
@@ -114,6 +118,11 @@ export default function PortalHeader({
             label: "Applications & Applicants",
             icon: <ClipboardCheck className="w-4 h-4" />,
           },
+          {
+            id: "csv-ideas",
+            label: "Ideas & CSV Retrieval",
+            icon: <FileSpreadsheet className="w-4 h-4" />,
+          },
           ...(currentUser.role === "ADMIN"
             ? [
                 {
@@ -125,6 +134,11 @@ export default function PortalHeader({
             : []),
           ...(currentUser.role === "SUPER_ADMIN"
             ? [
+                {
+                  id: "college-stats" as ActiveTab,
+                  label: "College Volunteering Stats",
+                  icon: <Building2 className="w-4 h-4" />,
+                },
                 {
                   id: "admins" as ActiveTab,
                   label: "Approve & Manage Admins",

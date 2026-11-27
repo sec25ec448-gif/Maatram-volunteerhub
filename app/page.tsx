@@ -18,6 +18,10 @@ import {
   GraduationCap,
   Briefcase,
   Calendar,
+  Building2,
+  Download,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import PortalHeader, { ActiveTab } from "@/components/PortalHeader";
 import DashboardOverview from "@/components/DashboardOverview";
@@ -29,10 +33,12 @@ import {
   INITIAL_OPPORTUNITIES,
   INITIAL_APPLICATIONS,
   INITIAL_ACTIVITY_HISTORY,
+  INITIAL_IDEAS,
   UserAccount,
   Opportunity,
   VolunteerApplication,
   VolunteerActivityRecord,
+  VolunteerIdea,
   UserRole,
 } from "@/data/mockData";
 
@@ -41,6 +47,16 @@ interface AppNotification {
   message: string;
   forRoles: UserRole[];
   recipientEmail?: string;
+}
+
+interface CollegeStat {
+  college: string;
+  totalVolunteers: number;
+  approvedVolunteers: number;
+  totalPoints: number;
+  totalHours: number;
+  completedActivities: number;
+  avgPointsPerVolunteer: number;
 }
 
 const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = {
@@ -113,6 +129,36 @@ function getVolunteerBadges(user: UserAccount) {
   ];
 }
 
+function escapeCsvField(value: string | number) {
+  const str = String(value ?? "");
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
 export default function MaatramVolunteerHubPage() {
   const [users, setUsers] = useState<UserAccount[]>(INITIAL_USERS);
   const [opportunities, setOpportunities] =
@@ -122,6 +168,7 @@ export default function MaatramVolunteerHubPage() {
   const [activityHistory, setActivityHistory] = useState<
     VolunteerActivityRecord[]
   >(INITIAL_ACTIVITY_HISTORY);
+  const [ideas, setIdeas] = useState<VolunteerIdea[]>(INITIAL_IDEAS);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signin" | "register" | "forgot">(
@@ -162,6 +209,10 @@ export default function MaatramVolunteerHubPage() {
   );
   const [awardNote, setAwardNote] = useState("Awarded by portal admin");
   const [awardFeedback, setAwardFeedback] = useState<string | null>(null);
+
+  // Admin CSV retrieval state
+  const [csvFilterCollege, setCsvFilterCollege] = useState("ALL");
+  const [csvStatusMsg, setCsvStatusMsg] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [notifications, setNotifications] = useState<AppNotification[]>([
@@ -804,6 +855,155 @@ export default function MaatramVolunteerHubPage() {
     (u) => u.status === "PENDING_APPROVAL"
   ).length;
 
+  // College-level volunteering statistics for Super Admin
+  const collegeMap = new Map<string, CollegeStat>();
+  for (const v of volunteers) {
+    const collegeName = (v.college || "General / Unspecified College").trim();
+    const existing = collegeMap.get(collegeName) || {
+      college: collegeName,
+      totalVolunteers: 0,
+      approvedVolunteers: 0,
+      totalPoints: 0,
+      totalHours: 0,
+      completedActivities: 0,
+      avgPointsPerVolunteer: 0,
+    };
+
+    existing.totalVolunteers += 1;
+    if (v.status === "APPROVED") existing.approvedVolunteers += 1;
+    existing.totalPoints += v.points;
+    existing.totalHours += v.verifiedHours;
+    existing.completedActivities += v.completedActivities;
+    existing.avgPointsPerVolunteer =
+      existing.totalVolunteers > 0
+        ? Math.round(existing.totalPoints / existing.totalVolunteers)
+        : 0;
+
+    collegeMap.set(collegeName, existing);
+  }
+
+  const collegeStats = Array.from(collegeMap.values()).sort(
+    (a, b) => b.totalPoints - a.totalPoints || b.totalHours - a.totalHours
+  );
+
+  const uniqueColleges = Array.from(
+    new Set(
+      ideas
+        .map((i) => i.college.trim())
+        .filter((c) => c.length > 0)
+    )
+  );
+
+  const filteredIdeas =
+    csvFilterCollege === "ALL"
+      ? ideas
+      : ideas.filter(
+          (i) => i.college.toLowerCase() === csvFilterCollege.toLowerCase()
+        );
+
+  const handleDownloadIdeasCsv = () => {
+    const headers = [
+      "ID",
+      "Title",
+      "Category",
+      "College",
+      "Submitted By",
+      "Date",
+      "Votes",
+      "Summary",
+    ];
+    const rows = filteredIdeas.map((item) =>
+      [
+        escapeCsvField(item.id),
+        escapeCsvField(item.title),
+        escapeCsvField(item.category),
+        escapeCsvField(item.college),
+        escapeCsvField(item.submittedBy),
+        escapeCsvField(item.date),
+        escapeCsvField(item.votes),
+        escapeCsvField(item.summary),
+      ].join(",")
+    );
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "maatram-volunteer-ideas.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setCsvStatusMsg(
+      `Retrieved and downloaded ${filteredIdeas.length} idea(s) to maatram-volunteer-ideas.csv.`
+    );
+  };
+
+  const handleUploadIdeasCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      if (lines.length <= 1) {
+        setCsvStatusMsg("CSV file had no idea rows to retrieve.");
+        return;
+      }
+
+      const imported: VolunteerIdea[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvLine(lines[i]);
+        if (!cols[0] && !cols[1]) continue;
+
+        const hasIdCol = cols.length >= 8;
+        const title = hasIdCol ? cols[1] : cols[0];
+        const category = hasIdCol ? cols[2] : cols[1];
+        const college = hasIdCol ? cols[3] : cols[2];
+        const submittedBy = hasIdCol ? cols[4] : cols[3];
+        const date = hasIdCol ? cols[5] : cols[4];
+        const votes = Number(hasIdCol ? cols[6] : cols[5]) || 0;
+        const summary = hasIdCol ? cols[7] : cols[6];
+
+        if (title) {
+          imported.push({
+            id: `idea-csv-${Date.now()}-${i}`,
+            title,
+            category: category || "General",
+            college: college || "General College",
+            submittedBy: submittedBy || "Volunteer",
+            date: date || "2026-11-27",
+            votes,
+            summary: summary || "Retrieved from CSV file",
+          });
+        }
+      }
+
+      if (imported.length === 0) {
+        setCsvStatusMsg("Could not parse valid idea rows from the CSV file.");
+        return;
+      }
+
+      setIdeas((prev) => [...imported, ...prev]);
+      setCsvStatusMsg(
+        `Retrieved ${imported.length} idea(s) from "${file.name}".`
+      );
+      pushNotification(
+        `Retrieved ${imported.length} volunteer idea(s) from CSV`,
+        ["ADMIN", "SUPER_ADMIN"]
+      );
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const leaderboardVolunteers = [...volunteers].sort(
     (a, b) => b.points - a.points || b.verifiedHours - a.verifiedHours
   );
@@ -1036,6 +1236,68 @@ export default function MaatramVolunteerHubPage() {
               pendingApprovalsCount={pendingCount}
             />
 
+            {isSuperAdmin && (
+              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#522A5B] flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-[#6F3577]" />
+                      <span>College Volunteering Performance Overview</span>
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Statistical summary of volunteering hours, points, and
+                      activities across colleges.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("college-stats")}
+                    className="text-xs font-semibold text-[#6F3577] hover:underline cursor-pointer"
+                  >
+                    View Full College Analytics →
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
+                        <th className="py-3 px-4">College</th>
+                        <th className="py-3 px-4">Volunteers</th>
+                        <th className="py-3 px-4">Verified Hours</th>
+                        <th className="py-3 px-4">Activities</th>
+                        <th className="py-3 px-4 text-right">Total Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {collegeStats.map((stat) => (
+                        <tr
+                          key={stat.college}
+                          className="border-b border-[#F3EAF6] text-sm"
+                        >
+                          <td className="py-3 px-4 font-semibold text-[#1F1624]">
+                            {stat.college}
+                          </td>
+                          <td className="py-3 px-4">
+                            {stat.approvedVolunteers} / {stat.totalVolunteers}
+                          </td>
+                          <td className="py-3 px-4 font-semibold">
+                            {stat.totalHours} hrs
+                          </td>
+                          <td className="py-3 px-4">
+                            {stat.completedActivities}
+                          </td>
+                          <td className="py-3 px-4 text-right font-extrabold text-[#6F3577]">
+                            {stat.totalPoints} pts
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <Award className="w-5 h-5 text-[#6F3577]" />
@@ -1126,6 +1388,211 @@ export default function MaatramVolunteerHubPage() {
               </form>
             </div>
           </>
+        )}
+
+        {isSuperAdmin && activeTab === "college-stats" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-[#522A5B]">
+                College Volunteering Statistics & Performance
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Statistical breakdown of all colleges and their volunteering
+                impact across Maatram VolunteerHub.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Total Colleges Tracked
+                </div>
+                <div className="text-2xl font-extrabold text-[#522A5B] mt-1">
+                  {collegeStats.length}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Combined College Points
+                </div>
+                <div className="text-2xl font-extrabold text-[#6F3577] mt-1">
+                  {collegeStats.reduce((sum, c) => sum + c.totalPoints, 0)} pts
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Combined Verified Hours
+                </div>
+                <div className="text-2xl font-extrabold text-[#1F1624] mt-1">
+                  {collegeStats.reduce((sum, c) => sum + c.totalHours, 0)} hrs
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase text-gray-500">
+                  Total Completed Activities
+                </div>
+                <div className="text-2xl font-extrabold text-amber-600 mt-1">
+                  {collegeStats.reduce(
+                    (sum, c) => sum + c.completedActivities,
+                    0
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
+              <h3 className="text-base font-bold text-[#1F1624] mb-4">
+                College Performance Table
+              </h3>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
+                      <th className="py-3 px-4">Rank</th>
+                      <th className="py-3 px-4">College Name</th>
+                      <th className="py-3 px-4">Approved / Total</th>
+                      <th className="py-3 px-4">Verified Hours</th>
+                      <th className="py-3 px-4">Activities</th>
+                      <th className="py-3 px-4">Avg Pts / Volunteer</th>
+                      <th className="py-3 px-4 text-right">Total Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {collegeStats.map((stat, idx) => (
+                      <tr
+                        key={stat.college}
+                        className="border-b border-[#F3EAF6] text-sm"
+                      >
+                        <td className="py-3.5 px-4 font-bold">
+                          #{idx + 1}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-[#1F1624]">
+                          {stat.college}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {stat.approvedVolunteers} / {stat.totalVolunteers}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold">
+                          {stat.totalHours} hrs
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {stat.completedActivities}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700">
+                          {stat.avgPointsPerVolunteer} pts
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-extrabold text-[#6F3577]">
+                          {stat.totalPoints} pts
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAdminOrSuperAdmin && activeTab === "csv-ideas" && (
+          <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#522A5B] flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-[#6F3577]" />
+                  <span>Volunteer Ideas & CSV Retrieval</span>
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Retrieve/export submitted volunteer ideas as a CSV file or load
+                  ideas from an external CSV file.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={csvFilterCollege}
+                  onChange={(e) => setCsvFilterCollege(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-[#E5D8EC] text-xs font-semibold bg-white text-[#1F1624]"
+                >
+                  <option value="ALL">All Colleges</option>
+                  {uniqueColleges.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadIdeasCsv}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#6F3577] hover:bg-[#522A5B] text-white text-xs font-semibold transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Retrieve Ideas CSV</span>
+                </button>
+
+                <label className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F3EAF6] hover:bg-[#E5D8EC] text-[#522A5B] text-xs font-semibold transition cursor-pointer border border-[#D7C2E0]">
+                  <Upload className="w-4 h-4" />
+                  <span>Import From CSV</span>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleUploadIdeasCsv}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {csvStatusMsg && (
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+                {csvStatusMsg}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
+                    <th className="py-3 px-4">Idea Title</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">College</th>
+                    <th className="py-3 px-4">Submitted By</th>
+                    <th className="py-3 px-4">Votes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredIdeas.map((idea) => (
+                    <tr
+                      key={idea.id}
+                      className="border-b border-[#F3EAF6] text-sm"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-[#1F1624]">
+                          {idea.title}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {idea.summary}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F3EAF6] text-[#522A5B]">
+                          {idea.category}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-gray-700">{idea.college}</td>
+                      <td className="py-3 px-4 text-gray-700">
+                        {idea.submittedBy}
+                      </td>
+                      <td className="py-3 px-4 font-bold text-[#6F3577]">
+                        {idea.votes}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {isAdminOrSuperAdmin && activeTab === "opportunities" && (

@@ -16,6 +16,17 @@ export interface VolunteerActivityRecord {
   note: string;
 }
 
+export interface VolunteerIdea {
+  id: string;
+  title: string;
+  category: string;
+  college: string;
+  submittedBy: string;
+  date: string;
+  votes: number;
+  summary: string;
+}
+
 export interface UserAccount {
   id: string;
   name: string;
@@ -120,6 +131,7 @@ export const INITIAL_USERS: UserAccount[] = [
     role: "ALUMNI_VOLUNTEER",
     status: "APPROVED",
     categoryLabel: "Alumni Volunteer",
+    college: "College of Engineering, Guindy",
     designation: "Senior Software Engineer",
     yearOfPassedOut: "2022",
     points: 520,
@@ -142,6 +154,22 @@ export const INITIAL_USERS: UserAccount[] = [
     verifiedHours: 8,
     completedActivities: 1,
     consecutiveWeeks: 1,
+  },
+  {
+    id: "u-7",
+    name: "Vikram Selvam",
+    email: "vikram@ssn.edu",
+    password: "Volunteer@123",
+    phone: "+91 98765 00004",
+    role: "STUDENT_VOLUNTEER",
+    status: "APPROVED",
+    categoryLabel: "Student Volunteer",
+    college: "SSN College of Engineering",
+    yearOfPassedOut: "2027",
+    points: 260,
+    verifiedHours: 18,
+    completedActivities: 3,
+    consecutiveWeeks: 2,
   },
 ];
 
@@ -207,5 +235,38 @@ export const INITIAL_ACTIVITY_HISTORY: VolunteerActivityRecord[] = [
     hours: 8,
     pointsAwarded: 140,
     note: "Student coordination & session support",
+  },
+];
+
+export const INITIAL_IDEAS: VolunteerIdea[] = [
+  {
+    id: "idea-1",
+    title: "Sunday Coding & Resume Clinic for First-Gen Students",
+    category: "Mentorship",
+    college: "College of Engineering, Guindy",
+    submittedBy: "Karthik Raja",
+    date: "2026-11-18",
+    votes: 24,
+    summary: "Weekly peer + alumni mock interviews and GitHub portfolio reviews.",
+  },
+  {
+    id: "idea-2",
+    title: "Tamil STEM Lab Kits for Rural Middle Schools",
+    category: "Education",
+    college: "SSN College of Engineering",
+    submittedBy: "Vikram Selvam",
+    date: "2026-11-21",
+    votes: 19,
+    summary: "Low-cost hands-on science and digital basics kits built by student clubs.",
+  },
+  {
+    id: "idea-3",
+    title: "Alumni Industry Panel & Scholarship Readiness Bootcamp",
+    category: "Career Guidance",
+    college: "College of Engineering, Guindy",
+    submittedBy: "Priya Sundaram",
+    date: "2026-11-24",
+    votes: 31,
+    summary: "Monthly alumni sessions guiding students on internships and higher studies.",
   },
 ];
