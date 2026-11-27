@@ -22,6 +22,8 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
+  Users,
+  BarChart3,
 } from "lucide-react";
 import PortalHeader, { ActiveTab } from "@/components/PortalHeader";
 import DashboardOverview from "@/components/DashboardOverview";
@@ -51,6 +53,7 @@ interface AppNotification {
 
 interface CollegeStat {
   college: string;
+  studentCount: number;
   totalVolunteers: number;
   approvedVolunteers: number;
   totalPoints: number;
@@ -200,14 +203,21 @@ export default function MaatramVolunteerHubPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
-  // Admin point award form state
-  const [awardTargetEmail, setAwardTargetEmail] = useState("karthik@student.edu");
-  const [awardPoints, setAwardPoints] = useState<number>(50);
-  const [awardHours, setAwardHours] = useState<number>(3);
-  const [awardActivityTitle, setAwardActivityTitle] = useState(
-    "Mentorship & Community Impact"
+  // Event-wide equal points & individual extra points state
+  const [eventPointsMap, setEventPointsMap] = useState<Record<string, number>>(
+    {}
   );
-  const [awardNote, setAwardNote] = useState("Awarded by portal admin");
+  const [eventHoursMap, setEventHoursMap] = useState<Record<string, number>>(
+    {}
+  );
+  const [extraStudentEmail, setExtraStudentEmail] = useState(
+    "karthik@student.edu"
+  );
+  const [extraPoints, setExtraPoints] = useState<number>(25);
+  const [extraHours, setExtraHours] = useState<number>(1);
+  const [extraReason, setExtraReason] = useState(
+    "Extra contribution & leadership bonus"
+  );
   const [awardFeedback, setAwardFeedback] = useState<string | null>(null);
 
   // Admin CSV retrieval state
@@ -354,7 +364,9 @@ export default function MaatramVolunteerHubPage() {
       status: "PENDING_APPROVAL",
       categoryLabel,
       college:
-        assignedRole === "STUDENT_VOLUNTEER" ? regCollege.trim() : undefined,
+        assignedRole === "STUDENT_VOLUNTEER"
+          ? regCollege.trim()
+          : regCollege.trim() || undefined,
       designation:
         assignedRole === "ALUMNI_VOLUNTEER"
           ? regDesignation.trim()
@@ -850,17 +862,22 @@ export default function MaatramVolunteerHubPage() {
   const isCurrentUserVolunteer = isVolunteerRole(currentUser.role);
 
   const volunteers = users.filter((u) => isVolunteerRole(u.role));
+  const studentVolunteers = users.filter((u) => u.role === "STUDENT_VOLUNTEER");
+  const pendingVolunteersForAdmin = volunteers.filter(
+    (u) => u.status === "PENDING_APPROVAL"
+  );
   const admins = users.filter((u) => u.role === "ADMIN");
   const pendingCount = users.filter(
     (u) => u.status === "PENDING_APPROVAL"
   ).length;
 
-  // College-level volunteering statistics for Super Admin
+  // College-level volunteering statistics for Super Admin graph
   const collegeMap = new Map<string, CollegeStat>();
   for (const v of volunteers) {
     const collegeName = (v.college || "General / Unspecified College").trim();
     const existing = collegeMap.get(collegeName) || {
       college: collegeName,
+      studentCount: 0,
       totalVolunteers: 0,
       approvedVolunteers: 0,
       totalPoints: 0,
@@ -870,6 +887,7 @@ export default function MaatramVolunteerHubPage() {
     };
 
     existing.totalVolunteers += 1;
+    if (v.role === "STUDENT_VOLUNTEER") existing.studentCount += 1;
     if (v.status === "APPROVED") existing.approvedVolunteers += 1;
     existing.totalPoints += v.points;
     existing.totalHours += v.verifiedHours;
@@ -885,12 +903,15 @@ export default function MaatramVolunteerHubPage() {
   const collegeStats = Array.from(collegeMap.values()).sort(
     (a, b) => b.totalPoints - a.totalPoints || b.totalHours - a.totalHours
   );
+  const maxCollegePoints = Math.max(
+    1,
+    ...collegeStats.map((c) => c.totalPoints)
+  );
+  const maxCollegeHours = Math.max(1, ...collegeStats.map((c) => c.totalHours));
 
   const uniqueColleges = Array.from(
     new Set(
-      ideas
-        .map((i) => i.college.trim())
-        .filter((c) => c.length > 0)
+      ideas.map((i) => i.college.trim()).filter((c) => c.length > 0)
     )
   );
 
@@ -1029,24 +1050,36 @@ export default function MaatramVolunteerHubPage() {
     }
   };
 
-  const handleAwardPointsToVolunteer = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Award the exact same points & hours to every approved participant of a specific event
+  const handleAwardEqualPointsForEvent = (opp: Opportunity) => {
     if (!isAdminOrSuperAdmin) return;
 
-    const ptsToAdd = Math.max(0, Number(awardPoints) || 0);
-    const hrsToAdd = Math.max(0, Number(awardHours) || 0);
-    const targetUser = users.find(
-      (u) => u.email.toLowerCase() === awardTargetEmail.toLowerCase()
+    const eventApprovedApps = applications.filter(
+      (a) => a.opportunityId === opp.id && a.status === "APPROVED"
     );
-
-    if (!targetUser) {
-      setAwardFeedback("Please select a valid volunteer.");
+    if (eventApprovedApps.length === 0) {
+      setAwardFeedback(
+        `No approved participants found in "${opp.title}" yet.`
+      );
       return;
     }
 
+    const ptsToAdd = Math.max(
+      1,
+      Number(eventPointsMap[opp.id] ?? opp.defaultPoints ?? 80)
+    );
+    const hrsToAdd = Math.max(
+      0,
+      Number(eventHoursMap[opp.id] ?? opp.defaultHours ?? 4)
+    );
+
+    const participantEmails = new Set(
+      eventApprovedApps.map((a) => a.volunteerEmail.toLowerCase())
+    );
+
     setUsers((prev) =>
       prev.map((u) =>
-        u.email.toLowerCase() === targetUser.email.toLowerCase()
+        participantEmails.has(u.email.toLowerCase())
           ? {
               ...u,
               points: u.points + ptsToAdd,
@@ -1057,28 +1090,88 @@ export default function MaatramVolunteerHubPage() {
       )
     );
 
-    const newRecord: VolunteerActivityRecord = {
-      id: `act-${Date.now()}`,
-      volunteerEmail: targetUser.email,
-      activityTitle: awardActivityTitle.trim() || "Verified Volunteer Activity",
+    const newRecords: VolunteerActivityRecord[] = eventApprovedApps.map(
+      (app, index) => ({
+        id: `act-${Date.now()}-${index}`,
+        volunteerEmail: app.volunteerEmail,
+        activityTitle: opp.title,
+        date: "2026-11-27",
+        hours: hrsToAdd,
+        pointsAwarded: ptsToAdd,
+        note: "Equal event participation points awarded by admin",
+      })
+    );
+
+    setActivityHistory((prev) => [...newRecords, ...prev]);
+
+    for (const app of eventApprovedApps) {
+      pushNotification(
+        `You received +${ptsToAdd} pts & +${hrsToAdd} hrs for ${opp.title}`,
+        ["STUDENT_VOLUNTEER", "ALUMNI_VOLUNTEER"],
+        app.volunteerEmail
+      );
+    }
+
+    pushNotification(
+      `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs equally to ${eventApprovedApps.length} participant(s) in ${opp.title}`,
+      ["ADMIN", "SUPER_ADMIN"]
+    );
+
+    setAwardFeedback(
+      `Awarded +${ptsToAdd} points and +${hrsToAdd} hours equally to all ${eventApprovedApps.length} participant(s) in "${opp.title}".`
+    );
+  };
+
+  // Award extra bonus points separately to a particular student
+  const handleAwardExtraPointsToStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdminOrSuperAdmin) return;
+
+    const ptsToAdd = Math.max(1, Number(extraPoints) || 0);
+    const hrsToAdd = Math.max(0, Number(extraHours) || 0);
+    const targetStudent = studentVolunteers.find(
+      (s) => s.email.toLowerCase() === extraStudentEmail.toLowerCase()
+    );
+
+    if (!targetStudent) {
+      setAwardFeedback("Please select a valid student volunteer.");
+      return;
+    }
+
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.email.toLowerCase() === targetStudent.email.toLowerCase()
+          ? {
+              ...u,
+              points: u.points + ptsToAdd,
+              verifiedHours: u.verifiedHours + hrsToAdd,
+            }
+          : u
+      )
+    );
+
+    const bonusRecord: VolunteerActivityRecord = {
+      id: `act-extra-${Date.now()}`,
+      volunteerEmail: targetStudent.email,
+      activityTitle: extraReason.trim() || "Extra Student Bonus Points",
       date: "2026-11-27",
       hours: hrsToAdd,
       pointsAwarded: ptsToAdd,
-      note: awardNote.trim() || "Awarded by admin",
+      note: "Extra individual points awarded by admin",
     };
 
-    setActivityHistory((prev) => [newRecord, ...prev]);
+    setActivityHistory((prev) => [bonusRecord, ...prev]);
     pushNotification(
-      `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs for ${awardActivityTitle.trim() || "activity"}`,
-      ["STUDENT_VOLUNTEER", "ALUMNI_VOLUNTEER"],
-      targetUser.email
+      `You received +${ptsToAdd} extra bonus pts (${extraReason.trim() || "Admin recognition"})`,
+      ["STUDENT_VOLUNTEER"],
+      targetStudent.email
     );
     pushNotification(
-      `Awarded +${ptsToAdd} pts & +${hrsToAdd} hrs to ${targetUser.name}`,
+      `Awarded +${ptsToAdd} extra pts to student ${targetStudent.name}`,
       ["ADMIN", "SUPER_ADMIN"]
     );
     setAwardFeedback(
-      `Awarded +${ptsToAdd} points and +${hrsToAdd} verified hours to ${targetUser.name}.`
+      `Awarded +${ptsToAdd} extra points (and +${hrsToAdd} hrs) separately to ${targetStudent.name}.`
     );
   };
 
@@ -1097,7 +1190,14 @@ export default function MaatramVolunteerHubPage() {
         setOpportunities((prev) =>
           prev.map((o) =>
             o.id === appItem.opportunityId
-              ? { ...o, filledSlots: Math.min(o.totalSlots, o.filledSlots + 1) }
+              ? {
+                  ...o,
+                  filledSlots: Math.min(o.totalSlots, o.filledSlots + 1),
+                  studentsCount:
+                    appItem.volunteerRole === "STUDENT_VOLUNTEER"
+                      ? o.studentsCount + 1
+                      : o.studentsCount,
+                }
               : o
           )
         );
@@ -1115,7 +1215,7 @@ export default function MaatramVolunteerHubPage() {
   };
 
   const handleCreateOpportunity = (
-    newOppData: Omit<Opportunity, "id" | "filledSlots">
+    newOppData: Omit<Opportunity, "id" | "filledSlots" | "studentsCount">
   ) => {
     if (!isAdminOrSuperAdmin) return;
 
@@ -1123,6 +1223,7 @@ export default function MaatramVolunteerHubPage() {
       ...newOppData,
       id: `opp-${Date.now()}`,
       filledSlots: 0,
+      studentsCount: 0,
       defaultPoints: 80,
       defaultHours: 5,
     };
@@ -1146,9 +1247,19 @@ export default function MaatramVolunteerHubPage() {
       opportunityTitle: opp.title,
       volunteerName: currentUser.name,
       volunteerEmail: currentUser.email,
+      volunteerRole: currentUser.role,
       status: "PENDING",
     };
     setApplications((prev) => [newApp, ...prev]);
+
+    if (currentUser.role === "STUDENT_VOLUNTEER") {
+      setOpportunities((prev) =>
+        prev.map((o) =>
+          o.id === opp.id ? { ...o, studentsCount: o.studentsCount + 1 } : o
+        )
+      );
+    }
+
     pushNotification(`${currentUser.name} applied for ${opp.title}`, ["ADMIN"]);
   };
 
@@ -1160,15 +1271,23 @@ export default function MaatramVolunteerHubPage() {
 
     setApplications((prev) => prev.filter((a) => a.id !== appId));
 
-    if (targetApp.status === "APPROVED") {
-      setOpportunities((prev) =>
-        prev.map((o) =>
-          o.id === targetApp.opportunityId
-            ? { ...o, filledSlots: Math.max(0, o.filledSlots - 1) }
-            : o
-        )
-      );
-    }
+    setOpportunities((prev) =>
+      prev.map((o) => {
+        if (o.id !== targetApp.opportunityId) return o;
+        return {
+          ...o,
+          filledSlots:
+            targetApp.status === "APPROVED"
+              ? Math.max(0, o.filledSlots - 1)
+              : o.filledSlots,
+          studentsCount:
+            targetApp.volunteerRole === "STUDENT_VOLUNTEER" ||
+            currentUser.role === "STUDENT_VOLUNTEER"
+              ? Math.max(0, o.studentsCount - 1)
+              : o.studentsCount,
+        };
+      })
+    );
 
     pushNotification(
       `${currentUser.name} removed application for ${targetApp.opportunityTitle}`,
@@ -1236,102 +1355,187 @@ export default function MaatramVolunteerHubPage() {
               pendingApprovalsCount={pendingCount}
             />
 
-            {isSuperAdmin && (
-              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h2 className="text-lg font-bold text-[#522A5B] flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-[#6F3577]" />
-                      <span>College Volunteering Performance Overview</span>
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Statistical summary of volunteering hours, points, and
-                      activities across colleges.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("college-stats")}
-                    className="text-xs font-semibold text-[#6F3577] hover:underline cursor-pointer"
-                  >
-                    View Full College Analytics →
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
-                        <th className="py-3 px-4">College</th>
-                        <th className="py-3 px-4">Volunteers</th>
-                        <th className="py-3 px-4">Verified Hours</th>
-                        <th className="py-3 px-4">Activities</th>
-                        <th className="py-3 px-4 text-right">Total Points</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {collegeStats.map((stat) => (
-                        <tr
-                          key={stat.college}
-                          className="border-b border-[#F3EAF6] text-sm"
-                        >
-                          <td className="py-3 px-4 font-semibold text-[#1F1624]">
-                            {stat.college}
-                          </td>
-                          <td className="py-3 px-4">
-                            {stat.approvedVolunteers} / {stat.totalVolunteers}
-                          </td>
-                          <td className="py-3 px-4 font-semibold">
-                            {stat.totalHours} hrs
-                          </td>
-                          <td className="py-3 px-4">
-                            {stat.completedActivities}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-[#6F3577]">
-                            {stat.totalPoints} pts
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            {awardFeedback && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                {awardFeedback}
               </div>
             )}
 
+            {/* Individual Event Participants & Equal Points Awarding */}
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="text-lg font-bold text-[#522A5B] flex items-center gap-2">
+                    <Users className="w-5 h-5 text-[#6F3577]" />
+                    <span>
+                      Event Participants & Equal Event Points Distribution
+                    </span>
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    View individual participants for each event and award equal
+                    points to everyone who participated in that event.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("opportunities")}
+                  className="text-xs font-semibold text-[#6F3577] hover:underline cursor-pointer"
+                >
+                  Post / Manage Events →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {opportunities.map((opp) => {
+                  const eventParticipants = applications.filter(
+                    (a) =>
+                      a.opportunityId === opp.id && a.status === "APPROVED"
+                  );
+                  const ptsVal =
+                    eventPointsMap[opp.id] ?? opp.defaultPoints ?? 80;
+                  const hrsVal =
+                    eventHoursMap[opp.id] ?? opp.defaultHours ?? 4;
+
+                  return (
+                    <div
+                      key={opp.id}
+                      className="rounded-xl border border-[#E5D8EC] bg-[#FAF8FB] p-5 flex flex-col justify-between gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold uppercase px-2.5 py-0.5 rounded-full bg-[#F3EAF6] text-[#522A5B]">
+                            {opp.category}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {opp.location} • {opp.date}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-[#1F1624] mt-2">
+                          {opp.title}
+                        </h3>
+
+                        <div className="mt-3">
+                          <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                            Participants ({eventParticipants.length})
+                          </div>
+                          {eventParticipants.length === 0 ? (
+                            <p className="text-xs text-gray-500 italic">
+                              No approved participants yet.
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {eventParticipants.map((p) => {
+                                const userObj = users.find(
+                                  (u) =>
+                                    u.email.toLowerCase() ===
+                                    p.volunteerEmail.toLowerCase()
+                                );
+                                return (
+                                  <li
+                                    key={p.id}
+                                    className="flex items-center justify-between text-xs bg-white px-3 py-2 rounded-lg border border-[#EFE8F3]"
+                                  >
+                                    <div>
+                                      <span className="font-semibold text-[#1F1624]">
+                                        {p.volunteerName}
+                                      </span>
+                                      <span className="text-gray-500 ml-1.5">
+                                        ({p.volunteerEmail})
+                                      </span>
+                                    </div>
+                                    <span className="font-bold text-[#6F3577]">
+                                      {userObj ? `${userObj.points} pts` : ""}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-[#E5D8EC] flex flex-wrap items-end gap-2.5">
+                        <div className="w-24">
+                          <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                            Equal Points
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={ptsVal}
+                            onChange={(e) =>
+                              setEventPointsMap((prev) => ({
+                                ...prev,
+                                [opp.id]: Number(e.target.value),
+                              }))
+                            }
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-[#E5D8EC] bg-white text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div className="w-24">
+                          <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                            Equal Hours
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.5"
+                            value={hrsVal}
+                            onChange={(e) =>
+                              setEventHoursMap((prev) => ({
+                                ...prev,
+                                [opp.id]: Number(e.target.value),
+                              }))
+                            }
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-[#E5D8EC] bg-white text-xs font-semibold"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={eventParticipants.length === 0}
+                          onClick={() => handleAwardEqualPointsForEvent(opp)}
+                          className="flex-1 py-2 px-3 rounded-lg bg-[#6F3577] hover:bg-[#522A5B] disabled:opacity-50 text-white text-xs font-semibold transition cursor-pointer"
+                        >
+                          Give Same Points to All ({eventParticipants.length})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Award Extra Points Separately to a Particular Student */}
             <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <Award className="w-5 h-5 text-[#6F3577]" />
                 <h2 className="text-lg font-bold text-[#522A5B]">
-                  Award Points & Verified Hours to Volunteers
+                  Award Extra Points Separately to a Particular Student
                 </h2>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                Recognize volunteer participation—points automatically update
-                badges and the Volunteer Leaderboard.
+                Grant additional individual bonus points to a specific student
+                volunteer on top of equal event points.
               </p>
 
-              {awardFeedback && (
-                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
-                  {awardFeedback}
-                </div>
-              )}
-
               <form
-                onSubmit={handleAwardPointsToVolunteer}
+                onSubmit={handleAwardExtraPointsToStudent}
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end"
               >
                 <div>
                   <label className="block text-xs font-semibold text-[#1F1624] mb-1">
-                    Volunteer
+                    Student Volunteer
                   </label>
                   <select
-                    value={awardTargetEmail}
-                    onChange={(e) => setAwardTargetEmail(e.target.value)}
+                    value={extraStudentEmail}
+                    onChange={(e) => setExtraStudentEmail(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm bg-white focus:outline-none focus:border-[#6F3577]"
                   >
-                    {volunteers.map((v) => (
-                      <option key={v.id} value={v.email}>
-                        {v.name} ({v.categoryLabel}) • {v.points} pts
+                    {studentVolunteers.map((s) => (
+                      <option key={s.id} value={s.email}>
+                        {s.name} ({s.college || "Student"}) • {s.points} pts
                       </option>
                     ))}
                   </select>
@@ -1339,42 +1543,42 @@ export default function MaatramVolunteerHubPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-[#1F1624] mb-1">
-                    Activity / Reason
+                    Reason / Contribution
                   </label>
                   <input
                     type="text"
                     required
-                    value={awardActivityTitle}
-                    onChange={(e) => setAwardActivityTitle(e.target.value)}
+                    value={extraReason}
+                    onChange={(e) => setExtraReason(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-[#1F1624] mb-1">
-                    Points to Award
+                    Extra Points
                   </label>
                   <input
                     type="number"
                     min={1}
                     required
-                    value={awardPoints}
-                    onChange={(e) => setAwardPoints(Number(e.target.value))}
+                    value={extraPoints}
+                    onChange={(e) => setExtraPoints(Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-[#1F1624] mb-1">
-                    Verified Hours
+                    Extra Hours
                   </label>
                   <input
                     type="number"
                     min={0}
                     step="0.5"
                     required
-                    value={awardHours}
-                    onChange={(e) => setAwardHours(Number(e.target.value))}
+                    value={extraHours}
+                    onChange={(e) => setExtraHours(Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-lg border border-[#E5D8EC] text-sm focus:outline-none focus:border-[#6F3577]"
                   />
                 </div>
@@ -1383,10 +1587,95 @@ export default function MaatramVolunteerHubPage() {
                   type="submit"
                   className="w-full py-2.5 px-4 rounded-lg bg-[#6F3577] hover:bg-[#522A5B] text-white text-sm font-semibold transition cursor-pointer"
                 >
-                  Give Points
+                  Give Extra Points
                 </button>
               </form>
             </div>
+
+            {isSuperAdmin && (
+              <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#522A5B] flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-[#6F3577]" />
+                      <span>College Volunteering Performance Graph</span>
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Visual comparison of points earned and verified hours across
+                      colleges.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("college-stats")}
+                    className="text-xs font-semibold text-[#6F3577] hover:underline cursor-pointer"
+                  >
+                    Expand Graph View →
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {collegeStats.map((stat) => {
+                    const ptsWidth = Math.max(
+                      6,
+                      Math.round((stat.totalPoints / maxCollegePoints) * 100)
+                    );
+                    const hrsWidth = Math.max(
+                      6,
+                      Math.round((stat.totalHours / maxCollegeHours) * 100)
+                    );
+                    return (
+                      <div
+                        key={stat.college}
+                        className="rounded-xl border border-[#EFE8F3] p-4 bg-[#FAF9FB] space-y-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-[#1F1624]">
+                            {stat.college}
+                          </span>
+                          <span className="text-xs font-semibold text-[#522A5B]">
+                            {stat.studentCount} Students • {stat.totalPoints}{" "}
+                            pts • {stat.totalHours} hrs
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="w-16 text-gray-500 font-medium">
+                              Points
+                            </span>
+                            <div className="flex-1 h-3 rounded-full bg-[#ECE3F0] overflow-hidden">
+                              <div
+                                style={{ width: `${ptsWidth}%` }}
+                                className="h-full rounded-full bg-[#6F3577] transition-all"
+                              />
+                            </div>
+                            <span className="w-16 text-right font-bold text-[#6F3577]">
+                              {stat.totalPoints}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="w-16 text-gray-500 font-medium">
+                              Hours
+                            </span>
+                            <div className="flex-1 h-3 rounded-full bg-[#ECE3F0] overflow-hidden">
+                              <div
+                                style={{ width: `${hrsWidth}%` }}
+                                className="h-full rounded-full bg-amber-500 transition-all"
+                              />
+                            </div>
+                            <span className="w-16 text-right font-bold text-amber-600">
+                              {stat.totalHours}h
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -1394,101 +1683,97 @@ export default function MaatramVolunteerHubPage() {
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold text-[#522A5B]">
-                College Volunteering Statistics & Performance
+                College Volunteering Performance Graph
               </h2>
               <p className="text-sm text-gray-600 mt-1">
-                Statistical breakdown of all colleges and their volunteering
-                impact across Maatram VolunteerHub.
+                Graphical comparison of college volunteering performance across
+                total points, verified hours, and student participation.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase text-gray-500">
-                  Total Colleges Tracked
-                </div>
-                <div className="text-2xl font-extrabold text-[#522A5B] mt-1">
-                  {collegeStats.length}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase text-gray-500">
-                  Combined College Points
-                </div>
-                <div className="text-2xl font-extrabold text-[#6F3577] mt-1">
-                  {collegeStats.reduce((sum, c) => sum + c.totalPoints, 0)} pts
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase text-gray-500">
-                  Combined Verified Hours
-                </div>
-                <div className="text-2xl font-extrabold text-[#1F1624] mt-1">
-                  {collegeStats.reduce((sum, c) => sum + c.totalHours, 0)} hrs
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-[#1F1624] flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-[#6F3577]" />
+                  <span>Points & Verified Hours by College</span>
+                </h3>
+                <div className="flex items-center gap-4 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1.5 text-[#6F3577]">
+                    <span className="w-3 h-3 rounded-xs bg-[#6F3577] inline-block" />
+                    Points Earned
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-amber-600">
+                    <span className="w-3 h-3 rounded-xs bg-amber-500 inline-block" />
+                    Verified Hours
+                  </span>
                 </div>
               </div>
-              <div className="bg-white rounded-xl border border-[#E5D8EC] p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase text-gray-500">
-                  Total Completed Activities
-                </div>
-                <div className="text-2xl font-extrabold text-amber-600 mt-1">
-                  {collegeStats.reduce(
-                    (sum, c) => sum + c.completedActivities,
-                    0
-                  )}
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm">
-              <h3 className="text-base font-bold text-[#1F1624] mb-4">
-                College Performance Table
-              </h3>
+              <div className="space-y-5">
+                {collegeStats.map((stat, idx) => {
+                  const ptsPercent = Math.max(
+                    8,
+                    Math.round((stat.totalPoints / maxCollegePoints) * 100)
+                  );
+                  const hrsPercent = Math.max(
+                    8,
+                    Math.round((stat.totalHours / maxCollegeHours) * 100)
+                  );
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#E5D8EC] text-xs uppercase text-[#522A5B]">
-                      <th className="py-3 px-4">Rank</th>
-                      <th className="py-3 px-4">College Name</th>
-                      <th className="py-3 px-4">Approved / Total</th>
-                      <th className="py-3 px-4">Verified Hours</th>
-                      <th className="py-3 px-4">Activities</th>
-                      <th className="py-3 px-4">Avg Pts / Volunteer</th>
-                      <th className="py-3 px-4 text-right">Total Points</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {collegeStats.map((stat, idx) => (
-                      <tr
-                        key={stat.college}
-                        className="border-b border-[#F3EAF6] text-sm"
-                      >
-                        <td className="py-3.5 px-4 font-bold">
-                          #{idx + 1}
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-[#1F1624]">
-                          {stat.college}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {stat.approvedVolunteers} / {stat.totalVolunteers}
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold">
-                          {stat.totalHours} hrs
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {stat.completedActivities}
-                        </td>
-                        <td className="py-3.5 px-4 text-gray-700">
-                          {stat.avgPointsPerVolunteer} pts
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-extrabold text-[#6F3577]">
-                          {stat.totalPoints} pts
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  return (
+                    <div
+                      key={stat.college}
+                      className="rounded-xl border border-[#E5D8EC] p-4 bg-[#FAF8FB] space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-bold text-sm text-[#1F1624]">
+                          #{idx + 1} {stat.college}
+                        </div>
+                        <div className="text-xs font-semibold text-[#522A5B]">
+                          {stat.studentCount} Students •{" "}
+                          {stat.completedActivities} Activities • Avg{" "}
+                          {stat.avgPointsPerVolunteer} pts/volunteer
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-gray-600">
+                              Total Points
+                            </span>
+                            <span className="font-bold text-[#6F3577]">
+                              {stat.totalPoints} pts ({ptsPercent}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-4 rounded-full bg-[#E8DDF0] overflow-hidden">
+                            <div
+                              style={{ width: `${ptsPercent}%` }}
+                              className="h-full rounded-full bg-[#6F3577] transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-gray-600">
+                              Verified Hours
+                            </span>
+                            <span className="font-bold text-amber-600">
+                              {stat.totalHours} hrs ({hrsPercent}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-4 rounded-full bg-[#F5EAD3] overflow-hidden">
+                            <div
+                              style={{ width: `${hrsPercent}%` }}
+                              className="h-full rounded-full bg-amber-500 transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1596,10 +1881,66 @@ export default function MaatramVolunteerHubPage() {
         )}
 
         {isAdminOrSuperAdmin && activeTab === "opportunities" && (
-          <OpportunitiesManager
-            opportunities={opportunities}
-            onCreateOpportunity={handleCreateOpportunity}
-          />
+          <div className="space-y-6">
+            <OpportunitiesManager
+              opportunities={opportunities}
+              onCreateOpportunity={handleCreateOpportunity}
+            />
+
+            <div className="bg-white rounded-2xl border border-[#E5D8EC] p-6 shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-[#522A5B]">
+                Individual Participants Under Each Event
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {opportunities.map((opp) => {
+                  const eventParticipants = applications.filter(
+                    (a) =>
+                      a.opportunityId === opp.id && a.status === "APPROVED"
+                  );
+                  return (
+                    <div
+                      key={opp.id}
+                      className="rounded-xl border border-[#E5D8EC] p-4 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-sm text-[#1F1624]">
+                            {opp.title}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {opp.location} • {opp.date}
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full bg-[#F3EAF6] text-[#522A5B] text-xs font-bold">
+                          {eventParticipants.length} Participated
+                        </span>
+                      </div>
+
+                      {eventParticipants.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic">
+                          No approved participants yet.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {eventParticipants.map((p) => (
+                            <li
+                              key={p.id}
+                              className="text-xs text-[#1F1624] bg-[#FAF8FB] px-2.5 py-1.5 rounded-md border border-[#EFE8F3]"
+                            >
+                              {p.volunteerName} —{" "}
+                              <span className="text-gray-500">
+                                {p.volunteerEmail}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
 
         {isAdminOrSuperAdmin && activeTab === "applications" && (
@@ -1611,11 +1952,11 @@ export default function MaatramVolunteerHubPage() {
 
         {isAdmin && activeTab === "volunteers" && (
           <UserApprovalsTable
-            title="Volunteer Registration Requests (Student & Alumni)"
+            title="Pending Volunteer Registration Requests"
             nameHeader="Name"
             approveLabel="Approve"
             roleType="STUDENT_VOLUNTEER"
-            users={volunteers}
+            users={pendingVolunteersForAdmin}
             onApproveUser={handleUserApproval}
           />
         )}

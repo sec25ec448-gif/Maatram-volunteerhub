@@ -53,6 +53,7 @@ export interface Opportunity {
   date: string;
   totalSlots: number;
   filledSlots: number;
+  studentsCount: number;
   defaultPoints?: number;
   defaultHours?: number;
 }
@@ -63,6 +64,7 @@ export interface VolunteerApplication {
   opportunityTitle: string;
   volunteerName: string;
   volunteerEmail: string;
+  volunteerRole?: UserRole;
   status: "PENDING" | "APPROVED" | "DECLINED";
 }
 
@@ -182,6 +184,7 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
     date: "2026-12-05",
     totalSlots: 25,
     filledSlots: 18,
+    studentsCount: 14,
     defaultPoints: 100,
     defaultHours: 6,
   },
@@ -193,6 +196,7 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
     date: "2026-12-12",
     totalSlots: 20,
     filledSlots: 12,
+    studentsCount: 9,
     defaultPoints: 80,
     defaultHours: 5,
   },
@@ -205,6 +209,7 @@ export const INITIAL_APPLICATIONS: VolunteerApplication[] = [
     opportunityTitle: "Weekend Career Mentorship Drive",
     volunteerName: "Karthik Raja",
     volunteerEmail: "karthik@student.edu",
+    volunteerRole: "STUDENT_VOLUNTEER",
     status: "APPROVED",
   },
   {
@@ -213,6 +218,7 @@ export const INITIAL_APPLICATIONS: VolunteerApplication[] = [
     opportunityTitle: "School Digital Literacy Workshop",
     volunteerName: "Anitha Ramesh",
     volunteerEmail: "anitha@volunteer.org",
+    volunteerRole: "STUDENT_VOLUNTEER",
     status: "PENDING",
   },
 ];
@@ -257,7 +263,8 @@ export const INITIAL_IDEAS: VolunteerIdea[] = [
     submittedBy: "Vikram Selvam",
     date: "2026-11-21",
     votes: 19,
-    summary: "Low-cost hands-on science and digital basics kits built by student clubs.",
+    summary:
+      "Low-cost hands-on science and digital basics kits built by student clubs.",
   },
   {
     id: "idea-3",
@@ -267,6 +274,7 @@ export const INITIAL_IDEAS: VolunteerIdea[] = [
     submittedBy: "Priya Sundaram",
     date: "2026-11-24",
     votes: 31,
-    summary: "Monthly alumni sessions guiding students on internships and higher studies.",
+    summary:
+      "Monthly alumni sessions guiding students on internships and higher studies.",
   },
 ];
